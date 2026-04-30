@@ -10,8 +10,8 @@ def make_call():
 
     payload = {
         "dialout_settings": {
-            # "phone_number": "+919952825938"
-            "phone_number": "+919698350966"
+            "phone_number": "+919952825938"
+            # "phone_number": "+919698350966"
         }
     }
 
