@@ -55,7 +55,8 @@ RUN ln -sf /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
 RUN echo '#!/bin/bash\n\
     nginx &\n\
     python outbound/server.py &\n\
-    uvicorn outbound.make_call:app --host 0.0.0.0 --port 8000\n\
+    uvicorn inbound.main:app --host 0.0.0.0 --port 8000 --reload &\n\
+    uvicorn outbound.make_call:app --host 0.0.0.0 --port 8001\n\
     ' > /app/start-app.sh && chmod +x /app/start-app.sh
 
 EXPOSE 8000
