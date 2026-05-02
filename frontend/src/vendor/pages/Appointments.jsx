@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Loader2, Phone } from 'lucide-react';
 import { getAppointments, updateAppointmentStatus, startOutboundCall } from '../../api';
+import Toast from '../../components/Toast';
 
 const StatusBadge = ({ status }) => {
   let styles = '';
@@ -12,11 +13,19 @@ const StatusBadge = ({ status }) => {
   return <span className={`px-2.5 py-1 text-[11px] font-bold rounded-full ${styles}`}>{s}</span>;
 }
 
+const WhatsAppBadge = ({ status }) => {
+  if (status === 'delivered') return <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-600"><div className="w-1.5 h-1.5 bg-emerald-500 rounded-full" /> WhatsApp Delivered</span>;
+  if (status === 'read') return <span className="flex items-center gap-1 text-[10px] font-bold text-blue-600"><div className="w-1.5 h-1.5 bg-blue-500 rounded-full" /> WhatsApp Read</span>;
+  if (status === 'failed') return <span className="flex items-center gap-1 text-[10px] font-bold text-rose-600"><div className="w-1.5 h-1.5 bg-rose-500 rounded-full" /> WhatsApp Failed</span>;
+  return <span className="flex items-center gap-1 text-[10px] font-bold text-gray-400"><div className="w-1.5 h-1.5 bg-gray-300 rounded-full" /> Sent</span>;
+}
+
 const Appointments = () => {
   const [activeTab, setActiveTab] = useState('Today');
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [callingId, setCallingId] = useState(null);
+  const [toast, setToast] = useState(null);
 
   useEffect(() => {
     const fetchAppointments = async () => {
@@ -34,12 +43,16 @@ const Appointments = () => {
   }, []);
 
   const handleCallNow = async (id, phone) => {
+    // Normalise phone: strip non-digits, ensure it starts with country code if needed
+    const normalizedPhone = phone.replace(/\D/g, '');
+    const finalPhone = normalizedPhone.startsWith('91') ? normalizedPhone : `91${normalizedPhone}`;
+    
     try {
       setCallingId(id);
-      await startOutboundCall(phone);
-      alert(`Outbound call triggered for ${phone}`);
+      await startOutboundCall(finalPhone);
+      setToast({ message: `Outbound call initiated for ${finalPhone}`, type: 'success' });
     } catch (err) {
-      alert('Failed to trigger outbound call: ' + err.message);
+      setToast({ message: 'Error triggering call: ' + err.message, type: 'error' });
     } finally {
       setCallingId(null);
     }
@@ -101,7 +114,12 @@ const Appointments = () => {
                     <td className="font-semibold text-gray-900">{apt.name}</td>
                     <td className="text-gray-500">{apt.appointment_date}</td>
                     <td className="text-gray-500">{apt.appointment_time?.split(':').slice(0, 2).join(':')}</td>
-                    <td className="text-gray-600">{apt.phone}</td>
+                    <td className="text-gray-600">
+                       <div className="flex flex-col gap-1">
+                          <span>{apt.phone}</span>
+                          <WhatsAppBadge status={apt.whatsapp_status} />
+                       </div>
+                    </td>
                     <td>
                       <select 
                         value={apt.call_status || 'Booked'}
@@ -111,8 +129,9 @@ const Appointments = () => {
                             await updateAppointmentStatus(apt.id, newStatus);
                             // Optimistically update UI or re-fetch
                             setAppointments(prev => prev.map(p => p.id === apt.id ? { ...p, call_status: newStatus } : p));
+                            setToast({ message: `Status updated to ${newStatus}`, type: 'success' });
                           } catch (err) {
-                            alert('Failed to update status');
+                            setToast({ message: 'Failed to update status', type: 'error' });
                           }
                         }}
                         className="bg-transparent text-[11px] font-bold border-none focus:ring-0 cursor-pointer hover:bg-gray-100 rounded-md py-1"
@@ -150,6 +169,7 @@ const Appointments = () => {
           )}
         </div>
       </div>
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </div>
   );
 };

@@ -6,7 +6,8 @@ import {
   PhoneCall, 
   AlertTriangle, 
   UserSquare2, 
-  Settings 
+  Settings,
+  Play
 } from 'lucide-react';
 import { useAuth } from '../../components/AuthContext';
 
@@ -14,6 +15,7 @@ const NAV_ITEMS = [
   { id: 'Home', path: '/', icon: Home },
   { id: 'Appointments', path: '/appointments', icon: CalendarDays },
   { id: 'Call Log', path: '/call-log', icon: PhoneCall },
+  { id: 'Campaigns', path: '/campaigns', icon: Play },
   { id: 'Escalations', path: '/escalations', icon: AlertTriangle },
   { id: 'Patient History', path: '/patients', icon: UserSquare2 },
   { id: 'Settings', path: '/settings', icon: Settings },

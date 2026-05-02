@@ -1,47 +1,21 @@
-import React, { useState } from 'react';
-import { Download, ChevronDown, ChevronUp } from 'lucide-react';
-
-const MOCK_CALLS = [
-  { 
-    id: 1, 
-    clinic: 'Chennai Dental Care', 
-    caller: '+91 98765 43210', 
-    date: 'Jan 15, 2025 10:23 AM', 
-    duration: '3m 45s', 
-    lang: 'Tamil', 
-    intent: 'Book Appointment', 
-    outcome: 'Resolved',
-    transcriptSummary: 'Caller requested a dental cleaning appointment. AI checked available slots for next week and confirmed booking for January 22nd at 2:00 PM.',
-    intentDecision: 'Intent classified as appointment_booking with high confidence (0.94). Caller provided preferred date range and treatment type.',
-    toolCalled: 'check_slot() → book_slot(date="2025-01-22", time="14:00", treatment="cleaning")'
-  },
-  { 
-    id: 2, 
-    clinic: 'Coimbatore Ortho Clinic', 
-    caller: '+91 98765 43211', 
-    date: 'Jan 15, 2025 10:15 AM', 
-    duration: '2m 12s', 
-    lang: 'English', 
-    intent: 'Reschedule Appointment', 
-    outcome: 'Resolved' 
-  },
-  { id: 3, clinic: 'Chennai Dental Care', caller: '+91 98765 43212', date: 'Jan 15, 2025 09:58 AM', duration: '5m 31s', lang: 'Both', intent: 'General Inquiry', outcome: 'Transferred' },
-  { id: 4, clinic: 'Madurai Pediatric Center', caller: '+91 98765 43213', date: 'Jan 15, 2025 09:42 AM', duration: '1m 54s', lang: 'Tamil', intent: 'Cancel Appointment', outcome: 'Resolved' },
-  { id: 5, clinic: 'Trichy ENT Specialists', caller: '+91 98765 43214', date: 'Jan 15, 2025 09:28 AM', duration: '4m 18s', lang: 'English', intent: 'Emergency Inquiry', outcome: 'Escalated' },
-  { id: 6, clinic: 'Coimbatore Ortho Clinic', caller: '+91 98765 43215', date: 'Jan 15, 2025 09:10 AM', duration: '0m 00s', lang: 'Tamil', intent: 'Unknown', outcome: 'Missed' },
-  { id: 7, clinic: 'Chennai Dental Care', caller: '+91 98765 43216', date: 'Jan 15, 2025 08:55 AM', duration: '3m 02s', lang: 'Tamil', intent: 'Check Availability', outcome: 'Resolved' },
-];
+import React, { useState, useEffect } from 'react';
+import { Download, ChevronDown, ChevronUp, Phone, Loader2 } from 'lucide-react';
+import { getCallLogs, startOutboundCall } from '../../api';
+import Toast from '../../components/Toast';
 
 const OutcomeBadge = ({ outcome }) => {
   let bgColor, textColor;
-  switch(outcome) {
-    case 'Resolved':
+  switch(outcome.toLowerCase()) {
+    case 'completed':
+    case 'resolved':
       bgColor = 'bg-emerald-100'; textColor = 'text-emerald-700'; break;
-    case 'Transferred':
+    case 'transferred':
       bgColor = 'bg-gray-100'; textColor = 'text-gray-700'; break;
-    case 'Escalated':
+    case 'failed':
+    case 'escalated':
       bgColor = 'bg-amber-100'; textColor = 'text-amber-700'; break;
-    case 'Missed':
+    case 'no-answer':
+    case 'missed':
       bgColor = 'bg-rose-100'; textColor = 'text-rose-700'; break;
     default:
       bgColor = 'bg-gray-100'; textColor = 'text-gray-700';
@@ -50,7 +24,37 @@ const OutcomeBadge = ({ outcome }) => {
 }
 
 const CallLogs = () => {
+  const [calls, setCalls] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState(null);
+  const [callingId, setCallingId] = useState(null);
+  const [toast, setToast] = useState(null);
+
+  useEffect(() => {
+    const fetchCalls = async () => {
+      try {
+        const data = await getCallLogs(1);
+        setCalls(data.logs || []);
+      } catch (err) {
+        console.error('Failed to fetch call logs:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchCalls();
+  }, []);
+
+  const handleCallNow = async (id, phone) => {
+    try {
+      setCallingId(id);
+      await startOutboundCall(phone);
+      setToast({ message: `Outbound call initiated for ${phone}`, type: 'success' });
+    } catch (err) {
+      setToast({ message: 'Error: ' + err.message, type: 'error' });
+    } finally {
+      setCallingId(null);
+    }
+  };
 
   const toggleExpand = (id) => {
     setExpandedId(expandedId === id ? null : id);
@@ -114,26 +118,54 @@ const CallLogs = () => {
                 <th>Language</th>
                 <th>Intent</th>
                 <th>Outcome</th>
-                <th className="pr-6 w-10"></th>
+                <th className="pr-6 w-32 text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {MOCK_CALLS.map(call => (
+              {loading ? (
+                <tr>
+                   <td colSpan="8" className="py-20 text-center">
+                      <Loader2 className="animate-spin text-gray-300 mx-auto" size={32} />
+                      <p className="text-xs font-bold text-gray-400 mt-4 tracking-widest uppercase">Fetching Global Call Logs...</p>
+                   </td>
+                </tr>
+              ) : calls.length === 0 ? (
+                <tr>
+                   <td colSpan="8" className="py-20 text-center text-gray-400 font-medium">No calls found in the system yet.</td>
+                </tr>
+              ) : calls.map(call => (
                 <React.Fragment key={call.id}>
                   <tr 
                     className={`cursor-pointer transition-colors ${expandedId === call.id ? 'bg-gray-50/50' : 'hover:bg-gray-50/30'}`}
                     onClick={() => toggleExpand(call.id)}
                   >
-                    <td className="pl-6 font-semibold text-gray-900">{call.clinic}</td>
-                    <td className="text-gray-900">{call.caller}</td>
-                    <td>{call.date}</td>
-                    <td>{call.duration}</td>
-                    <td>{call.lang}</td>
-                    <td className="text-gray-900">{call.intent}</td>
-                    <td><OutcomeBadge outcome={call.outcome} /></td>
-                    <td className="pr-6 text-gray-400">
-                      {expandedId === call.id ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                    </td>
+                    <td className="pl-6 font-semibold text-gray-900">{call.clinic || 'Main Clinic'}</td>
+                    <td className="text-gray-900">{call.caller_phone || call.caller}</td>
+                    <td>{call.created_at}</td>
+                    <td>{call.duration_seconds}s</td>
+                    <td>{call.language}</td>
+                    <td className="text-gray-900">{call.intent || 'Unknown'}</td>
+                    <td><OutcomeBadge outcome={call.status} /></td>
+                     <td className="pr-6 text-right">
+                       <div className="flex items-center justify-end gap-3">
+                         <button 
+                           onClick={(e) => {
+                             e.stopPropagation();
+                             handleCallNow(call.id, call.caller_phone || call.caller);
+                           }}
+                           disabled={callingId === call.id}
+                           className="p-1.5 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 disabled:opacity-50 transition-colors"
+                           title="Call Now"
+                         >
+                           {callingId === call.id ? (
+                             <Loader2 size={14} className="animate-spin" />
+                           ) : (
+                             <Phone size={14} fill="currentColor" />
+                           )}
+                         </button>
+                         {expandedId === call.id ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
+                       </div>
+                     </td>
                   </tr>
                   {expandedId === call.id && (
                     <tr>
@@ -142,22 +174,22 @@ const CallLogs = () => {
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                             <div>
                                <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Transcript Summary</h4>
-                               <p className="text-sm text-gray-700 leading-relaxed font-medium">
-                                 {call.transcriptSummary || "No summary available for this call."}
+                               <p className="text-sm text-gray-700 leading-relaxed font-medium italic">
+                                 "{call.transcriptSummary || "No summary available for this call."}"
                                </p>
                             </div>
                             <div className="space-y-4">
                                <div>
-                                  <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">LLM Intent Decision</h4>
+                                  <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">AI Decision Note</h4>
                                   <p className="text-sm text-gray-700 font-medium">
-                                    {call.intentDecision || "No decision data available."}
+                                    {call.aiDecision || "No decision data available."}
                                   </p>
                                </div>
                                <div>
-                                  <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Tool Called</h4>
-                                  <code className="text-[13px] bg-gray-50 px-3 py-1.5 rounded-lg text-gray-600 block w-full font-mono border border-gray-100">
-                                    {call.toolCalled || "No tools were triggered."}
-                                  </code>
+                                  <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Full Transcript Snippet</h4>
+                                  <div className="text-[13px] bg-gray-50 p-4 rounded-lg text-gray-600 block w-full font-mono border border-gray-100 max-h-40 overflow-y-auto whitespace-pre-wrap">
+                                    {call.transcript || "No transcript available."}
+                                  </div>
                                </div>
                             </div>
                           </div>
@@ -171,6 +203,7 @@ const CallLogs = () => {
           </table>
         </div>
       </div>
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </div>
   );
 };

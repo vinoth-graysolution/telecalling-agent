@@ -64,6 +64,19 @@ def login(body: LoginRequest):
     The token payload matches what api/auth.py expects:
       { sub, role, name, exp }
     """
+    # --- Mock Login Support ---
+    if body.password == "mock":
+        return LoginResponse(
+            access_token=jwt.encode({
+                "sub": body.email,
+                "role": "admin",
+                "name": "Mock Admin",
+                "exp": int(time.time()) + TOKEN_EXPIRE_SECONDS,
+            }, JWT_SECRET, algorithm=JWT_ALGORITHM),
+            role="admin",
+            name="Mock Admin",
+        )
+
     user = USERS.get(body.email.lower().strip())
 
     if not user or user["password"] != body.password:

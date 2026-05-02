@@ -61,6 +61,8 @@ def _serialize_row(row: dict) -> dict:
         "appointment_time": str(row["appointment_time"])[:5],  # HH:MM only
         "call_status": row.get("call_status"),
         "calendar_event_id": row.get("calendar_event_id"),
+        "whatsapp_status": row.get("whatsapp_status", "not_sent"),
+        "whatsapp_message_sid": row.get("whatsapp_message_sid"),
     }
 
 
@@ -113,7 +115,8 @@ def list_appointments(
                 f"""
                 SELECT id, name, phone, treatment_type,
                        appointment_date, appointment_time,
-                       call_status, calendar_event_id
+                       call_status, calendar_event_id,
+                       whatsapp_status, whatsapp_message_sid
                 FROM appointments
                 {where}
                 ORDER BY appointment_date ASC, appointment_time ASC
@@ -158,7 +161,8 @@ def get_appointment(appointment_id: int):
                 """
                 SELECT id, name, phone, treatment_type,
                        appointment_date, appointment_time,
-                       call_status, calendar_event_id
+                       call_status, calendar_event_id,
+                       whatsapp_status, whatsapp_message_sid
                 FROM appointments
                 WHERE id = %s
                 """,

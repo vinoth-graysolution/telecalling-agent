@@ -20,8 +20,8 @@ from pipecat.transcriptions.language import Language
 from pipecat.adapters.schemas.tools_schema import ToolsSchema
 
 from pipeline.services.openai.llm import OpenAILLMService
-from prompt.clinic_system_prompt import get_system_prompt
 from database.time_utils import get_current_context
+from database.utils import get_system_config
 from database.tools import (
     check_slot,
     book_slot,
@@ -30,6 +30,7 @@ from database.tools import (
     cancel_slot,
     transfer_to_human,
 )
+from database.call_logger import save_call_log, get_transcript_summary
 
 load_dotenv()
 
@@ -55,7 +56,7 @@ TTS_PACE        = 1.1
 TTS_TEMPERATURE = 0.01  # minimum allowed by Sarvam — near-deterministic & fast
 
 
-async def run_bot(transport, call_sid: str = ""):
+async def run_bot(transport, call_sid: str = "", phone: str = "unknown"):
     """
     Assemble and run the full STT → LLM → TTS pipeline for one call.
 
@@ -142,7 +143,7 @@ async def run_bot(transport, call_sid: str = ""):
     messages = [
         {
             "role": "system",
-            "content": get_system_prompt(time_context),
+            "content": get_system_config("inbound_prompt").format(**time_context),
         }
     ]
 
@@ -195,7 +196,28 @@ async def run_bot(transport, call_sid: str = ""):
 
     @transport.event_handler("on_client_disconnected")
     async def on_disconnected(transport, client):
-        logger.info(f"📴 Caller disconnected | call_sid={call_sid}")
+        logger.info(f"📴 Caller {phone} disconnected | call_sid={call_sid}")
+        
+        # Log the call
+        try:
+            # transcript is the full conversation history
+            transcript = "\n".join([f"{m['role']}: {m['content']}" for m in context.messages])
+            summary = get_transcript_summary(context.messages)
+            
+            # Save logs (this handles both local DB and Zoho)
+            save_call_log(
+                call_sid=call_sid,
+                phone=phone,
+                direction="inbound",
+                status="completed",
+                duration=0,
+                transcript=transcript,
+                summary=summary,
+                decision="Inbound call completed"
+            )
+        except Exception as e:
+            logger.error(f"Failed to log inbound call: {e}")
+            
         await task.cancel()
 
     # ── Run ──────────────────────────────────────────────────────────────────

@@ -1,31 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Search, Calendar, ChevronDown, ChevronUp, Clock, User, ClipboardList, CheckCircle, Phone, Loader2 } from 'lucide-react';
-import { startOutboundCall } from '../../api';
-
-const PATIENTS = [
-  { 
-    id: 1, 
-    initials: 'RK', 
-    name: 'Rajesh Kumar', 
-    phone: '+91 98765 43210', 
-    lastVisit: '15 Jan 2024', 
-    visits: 8, 
-    treatments: ['Root Canal', 'Cleaning'], 
-    status: 'Active',
-    history: [
-      { id: 101, date: '15 Jan 2024', time: '10:30 AM', treatment: 'Root Canal - Follow-up', doctor: 'Dr. Priya Sharma', outcome: 'Completed', status: 'Booked', ref: 'CL-2024-0115', notes: 'Patient reported no pain. Treatment successful.' },
-      { id: 102, date: '08 Jan 2024', time: '11:15 AM', treatment: 'Root Canal - Session 2', doctor: 'Dr. Priya Sharma', outcome: 'Completed', status: 'Booked', ref: 'CL-2024-0108', notes: 'Second session completed. One more follow-up needed.' },
-      { id: 103, date: '20 Dec 2023', time: '02:30 PM', treatment: 'Root Canal - Initial', doctor: 'Dr. Priya Sharma', outcome: 'Completed', status: 'Booked', ref: 'CL-2023-1220', notes: 'Started root canal treatment. Patient tolerated well.' },
-      { id: 104, date: '10 Nov 2023', time: '09:00 AM', treatment: 'Dental Cleaning', doctor: 'Dr. Arun Patel', outcome: 'Completed', status: 'Booked', ref: 'CL-2023-1110', notes: 'Routine cleaning. Advised to improve flossing.' },
-    ]
-  },
-  { id: 2, initials: 'LD', name: 'Lakshmi Devi', phone: '+91 98234 56789', lastVisit: '12 Jan 2024', visits: 5, treatments: ['Teeth Whitening', 'Cleaning'], status: 'Active' },
-  { id: 3, initials: 'AM', name: 'Arjun Menon', phone: '+91 99876 54321', lastVisit: '10 Jan 2024', visits: 12, treatments: ['Braces', 'Cleaning', 'X-Ray'], status: 'Active' },
-  { id: 4, initials: 'PI', name: 'Priya Iyer', phone: '+91 97654 32109', lastVisit: '08 Jan 2024', visits: 3, treatments: ['Filling', 'Cleaning'], status: 'Active' },
-  { id: 5, initials: 'SB', name: 'Suresh Babu', phone: '+91 96543 21098', lastVisit: '05 Jan 2024', visits: 6, treatments: ['Extraction', 'Cleaning'], status: 'Active' },
-  { id: 6, initials: 'AK', name: 'Anitha Krishnan', phone: '+91 95432 10987', lastVisit: '20 Nov 2023', visits: 4, treatments: ['Cleaning', 'Consultation'], status: 'Inactive' },
-  { id: 7, initials: 'VP', name: 'Vijay Prakash', phone: '+91 94321 09876', lastVisit: '14 Jan 2024', visits: 9, treatments: ['Crown', 'Root Canal', 'Cleaning'], status: 'Active' },
-];
+import { getPatients, getPatientHistory, startOutboundCall } from '../../api';
+import Toast from '../../components/Toast';
 
 const StatusBadge = ({ status }) => {
   return (
@@ -42,20 +18,55 @@ const Tag = ({ text }) => (
 );
 
 const PatientHistory = () => {
+  const [patients, setPatients] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState(null);
   const [callingId, setCallingId] = useState(null);
+  const [patientHistory, setPatientHistory] = useState({});
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [toast, setToast] = useState(null);
 
-  const toggleExpand = (id) => {
-    setExpandedId(expandedId === id ? null : id);
+  useEffect(() => {
+    const fetchPatients = async () => {
+      try {
+        const data = await getPatients();
+        setPatients(data.patients || []);
+      } catch (err) {
+        console.error('Failed to fetch patients:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchPatients();
+  }, []);
+
+  const toggleExpand = async (id, phone) => {
+    if (expandedId === id) {
+      setExpandedId(null);
+      return;
+    }
+    
+    setExpandedId(id);
+    if (!patientHistory[phone]) {
+      try {
+        setLoadingHistory(true);
+        const history = await getPatientHistory(phone.replace(/\D/g, ''));
+        setPatientHistory(prev => ({ ...prev, [phone]: history }));
+      } catch (err) {
+        console.error('Failed to fetch patient history:', err);
+      } finally {
+        setLoadingHistory(false);
+      }
+    }
   };
 
   const handleCallNow = async (id, phone) => {
     try {
       setCallingId(id);
       await startOutboundCall(phone);
-      alert(`Outbound call triggered for ${phone}`);
+      setToast({ message: `Outbound call initiated for ${phone}`, type: 'success' });
     } catch (err) {
-      alert('Failed to trigger outbound call: ' + err.message);
+      setToast({ message: 'Error triggering call: ' + err.message, type: 'error' });
     } finally {
       setCallingId(null);
     }
@@ -127,12 +138,19 @@ const PatientHistory = () => {
                   </tr>
                </thead>
                <tbody className="text-sm">
-                 {PATIENTS.map(patient => (
+                 {loading ? (
+                    <tr>
+                       <td colSpan="8" className="py-20 text-center">
+                          <Loader2 className="animate-spin text-gray-300 mx-auto" size={32} />
+                          <p className="text-xs font-bold text-gray-400 mt-4 tracking-widest uppercase">Loading Patient Records...</p>
+                       </td>
+                    </tr>
+                 ) : patients.map(patient => (
                    <React.Fragment key={patient.id}>
                      <tr 
                         className={`border-b border-gray-50 last:border-0 hover:bg-gray-50/50 transition-colors ${expandedId === patient.id ? 'bg-gray-50/30' : ''}`}
                      >
-                        <td className="pl-6 py-4 text-gray-400 cursor-pointer" onClick={() => toggleExpand(patient.id)}>
+                        <td className="pl-6 py-4 text-gray-400 cursor-pointer" onClick={() => toggleExpand(patient.id, patient.phone)}>
                           {expandedId === patient.id ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                         </td>
                         <td className="py-4">
@@ -150,7 +168,7 @@ const PatientHistory = () => {
                         </td>
                         <td>
                            <div className="flex flex-wrap gap-1.5">
-                              {patient.treatments.map(t => <Tag key={t} text={t} />)}
+                              {(patient.treatments || ['Cleaning']).map(t => <Tag key={t} text={t} />)}
                            </div>
                         </td>
                         <td><StatusBadge status={patient.status} /></td>
@@ -178,46 +196,59 @@ const PatientHistory = () => {
                                   <ClipboardList size={18} className="text-gray-400" /> Visit History
                                 </h3>
                              </div>
-                             <div className="grid grid-cols-1 gap-4">
-                               {(patient.history || []).map((visit) => (
-                                 <div key={visit.id} className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm space-y-4">
-                                   <div className="grid grid-cols-5 gap-6">
-                                     <div className="space-y-1">
-                                       <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block">Date & Time</span>
-                                       <span className="text-xs font-bold text-gray-900 flex items-center gap-1.5"><Calendar size={12} className="text-gray-400" /> {visit.date}</span>
-                                     </div>
-                                     <div className="space-y-1">
-                                       <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block">Treatment</span>
-                                       <span className="text-xs font-bold text-gray-900 block truncate">{visit.treatment}</span>
-                                     </div>
-                                     <div className="space-y-1">
-                                       <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block">Doctor</span>
-                                       <span className="text-xs font-bold text-gray-900 flex items-center gap-1.5"><User size={12} className="text-gray-400" /> {visit.doctor}</span>
-                                     </div>
-                                     <div className="space-y-1">
-                                       <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block">Outcome</span>
-                                       <span className="text-xs font-bold text-emerald-600 flex items-center gap-1.5"><CheckCircle size={12} /> {visit.outcome}</span>
-                                     </div>
-                                     <div className="space-y-1">
-                                       <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block">Status</span>
-                                       <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-bold rounded-full w-fit block">{visit.status}</span>
-                                     </div>
-                                   </div>
-                                   <div className="grid grid-cols-5 gap-6 pt-3 border-t border-gray-50">
-                                      <div className="col-span-1 border-r border-gray-50 pr-4">
-                                         <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block mb-1">Call Reference</span>
-                                         <span className="text-xs font-mono text-gray-500">{visit.ref}</span>
-                                      </div>
-                                      <div className="col-span-4">
-                                         <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block mb-1">Notes</span>
-                                         <p className="text-xs text-gray-600 italic">"{visit.notes}"</p>
-                                      </div>
-                                   </div>
+                             <div className="relative pl-8 space-y-8 before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-0.5 before:bg-gray-100">
+                               {loadingHistory ? (
+                                 <div className="flex flex-col items-center py-12">
+                                    <Loader2 className="animate-spin text-gray-200" size={32} />
+                                    <p className="text-[10px] font-bold text-gray-400 mt-4 uppercase tracking-widest">Building Interaction Timeline...</p>
+                                 </div>
+                               ) : (patientHistory[patient.phone] || []).map((visit, idx) => (
+                                 <div key={idx} className="relative">
+                                    <div className="absolute -left-[30px] top-1 w-5 h-5 bg-white border-2 border-gray-900 rounded-full flex items-center justify-center z-10 shadow-sm">
+                                       <div className="w-1.5 h-1.5 bg-gray-900 rounded-full" />
+                                    </div>
+                                    <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm space-y-4 hover:border-gray-900 transition-colors">
+                                       <div className="flex items-center justify-between">
+                                          <div className="flex items-center gap-3">
+                                             <span className="text-xs font-black text-gray-900">{visit.date}</span>
+                                             <span className="text-[10px] font-bold text-gray-400 bg-gray-50 px-2 py-0.5 rounded-full uppercase tracking-widest">{visit.time}</span>
+                                             <span className={`px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-tighter ${visit.type === 'call' ? 'bg-blue-50 text-blue-600' : 'bg-purple-50 text-purple-600'}`}>
+                                                {visit.type}
+                                             </span>
+                                          </div>
+                                          <span className={`px-2.5 py-1 text-[10px] font-black uppercase tracking-widest rounded-full ${['Completed', 'Booked'].includes(visit.outcome) ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                                             {visit.outcome}
+                                          </span>
+                                       </div>
+                                       
+                                       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2">
+                                          <div className="space-y-1">
+                                             <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block">Activity</span>
+                                             <p className="text-sm font-bold text-gray-900">{visit.treatment}</p>
+                                          </div>
+                                          <div className="space-y-1">
+                                             <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block">Agent/Doctor</span>
+                                             <p className="text-sm font-bold text-gray-700 flex items-center gap-2"><User size={14} className="text-gray-300" /> {visit.doctor}</p>
+                                          </div>
+                                          <div className="space-y-1">
+                                             <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block">Reference ID</span>
+                                             <p className="text-xs font-mono text-gray-500">{visit.ref}</p>
+                                          </div>
+                                       </div>
+
+                                       <div className="pt-4 border-t border-gray-50 flex items-start gap-3">
+                                          <div className="p-1.5 bg-amber-50 text-amber-600 rounded-lg shrink-0"><ClipboardList size={14} /></div>
+                                          <p className="text-xs text-gray-600 leading-relaxed italic font-medium">
+                                             "{visit.notes}"
+                                          </p>
+                                       </div>
+                                    </div>
                                  </div>
                                ))}
-                               {(!patient.history || patient.history.length === 0) && (
-                                 <div className="text-center py-8 bg-white rounded-xl border border-dashed border-gray-200 text-sm text-gray-400">
-                                   No visit history recorded for this patient.
+                               {!loadingHistory && (!patientHistory[patient.phone] || patientHistory[patient.phone].length === 0) && (
+                                 <div className="text-center py-12 bg-white rounded-2xl border border-dashed border-gray-200">
+                                    <div className="p-3 bg-gray-50 text-gray-300 rounded-full w-fit mx-auto mb-3"><ClipboardList size={32} /></div>
+                                    <p className="text-sm font-bold text-gray-400 uppercase tracking-widest">No Interaction History</p>
                                  </div>
                                )}
                              </div>
@@ -231,9 +262,9 @@ const PatientHistory = () => {
             </table>
          </div>
       </div>
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </div>
   );
 };
 
 export default PatientHistory;
-

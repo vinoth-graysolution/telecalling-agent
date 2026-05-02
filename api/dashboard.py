@@ -130,10 +130,40 @@ def get_dashboard_stats():
         with conn.cursor() as cur:
             appointment_stats = _fetch_appointment_stats(cur)
             call_log_stats = _fetch_call_log_stats(cur)
+            
+            # 1. Outcome Distribution
+            cur.execute("""
+                SELECT status, COUNT(*) as count 
+                FROM call_logs 
+                GROUP BY status
+            """)
+            outcomes = cur.fetchall()
+            
+            # 2. Peak Booking Hours (from appointments)
+            cur.execute("""
+                SELECT EXTRACT(HOUR FROM created_at) as hour, COUNT(*) as count
+                FROM appointments
+                GROUP BY hour
+                ORDER BY hour
+            """)
+            hours = cur.fetchall()
+            
+            # 3. Language Usage
+            cur.execute("""
+                SELECT language, COUNT(*) as count
+                FROM call_logs
+                GROUP BY language
+            """)
+            languages = cur.fetchall()
 
         return {
             "appointments": appointment_stats,
             "call_logs": call_log_stats,
+            "analytics": {
+                "outcomes": outcomes,
+                "hours": hours,
+                "languages": languages
+            }
         }
 
     except Exception as exc:
@@ -142,5 +172,53 @@ def get_dashboard_stats():
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),
         )
+    finally:
+        conn.close()
+
+
+@router.get(
+    "/live",
+    summary="Live call monitoring feed",
+    dependencies=[_AUTHORIZED],
+)
+def get_live_calls():
+    """
+    Returns calls currently in progress or recently completed.
+    In a production system, this would fetch from a Redis state or WebSocket feed.
+    """
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            # For demo/mock replacement, we'll fetch calls from the last 10 minutes
+            cur.execute(
+                """
+                SELECT id, caller_phone, status, direction, created_at
+                FROM call_logs
+                WHERE created_at > NOW() - INTERVAL '10 minutes'
+                ORDER BY created_at DESC
+                LIMIT 5
+                """
+            )
+            rows = cur.fetchall()
+            
+            live_calls = []
+            for r in rows:
+                # Map real DB status to UI stages
+                stage = "Conversation"
+                if r["status"] == "failed": stage = "Escalation Required"
+                if r["status"] == "completed": stage = "Call Ending"
+                
+                live_calls.append({
+                    "id": r["id"],
+                    "phone": r["caller_phone"],
+                    "status": "In Progress" if r["status"] == "in_progress" else r["status"].capitalize(),
+                    "duration": "Live",
+                    "stage": stage
+                })
+                
+        return live_calls
+    except Exception as exc:
+        logger.error(f"Live calls error: {exc}")
+        return []
     finally:
         conn.close()

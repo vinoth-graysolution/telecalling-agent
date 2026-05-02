@@ -42,3 +42,17 @@ async def get_free_slots(date: str) -> list[str]:
         free_slots.append(slot)
 
     return free_slots
+
+
+def get_system_config(key: str, default: str = None) -> str:
+    """Fetch a configuration value from the system_config table."""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT value FROM system_config WHERE key = %s", (key,))
+            row = cur.fetchone()
+            return row["value"] if row else default
+    except Exception:
+        return default
+    finally:
+        conn.close()

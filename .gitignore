@@ -12,3 +12,5 @@ wheels/
 uv.lock
 pyproject.toml
 google_credentials.json
+
+node_modules/

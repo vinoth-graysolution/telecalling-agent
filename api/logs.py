@@ -18,6 +18,14 @@ class CallLogOut(BaseModel):
     transcript: Optional[str] = None
     created_at: str
 
+def _parse_json(val):
+    import json
+    if not val: return []
+    try:
+        return json.loads(val)
+    except:
+        return []
+
 @router.get("", summary="List call logs (paginated)")
 def list_call_logs(
     page: int = Query(1, ge=1),
@@ -42,7 +50,8 @@ def list_call_logs(
             cur.execute(
                 f"""
                 SELECT id, call_sid, caller_phone, direction, status, 
-                       duration_seconds, transcript, created_at
+                       duration_seconds, transcript, created_at,
+                       priority, assignee, internal_notes, transcript_summary, ai_decision
                 FROM call_logs
                 {where}
                 ORDER BY created_at DESC
@@ -63,7 +72,12 @@ def list_call_logs(
                     "status": r["status"],
                     "duration": f"{r['duration_seconds'] // 60}m {r['duration_seconds'] % 60}s",
                     "date": str(r["created_at"]),
-                    "transcript": r.get("transcript", "")
+                    "transcript": r.get("transcript", ""),
+                    "priority": r.get("priority", "Low"),
+                    "assignee": r.get("assignee"),
+                    "notes": _parse_json(r.get("internal_notes")),
+                    "transcriptSummary": r.get("transcript_summary"),
+                    "aiDecision": r.get("ai_decision")
                 })
 
         return {

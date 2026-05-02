@@ -53,11 +53,11 @@ RUN ln -sf /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
 
 # Startup script
 RUN echo '#!/bin/bash\n\
-    nginx &\n\
+    nginx\n\
     python outbound/server.py &\n\
-    uvicorn outbound.make_call:app --host 0.0.0.0 --port 8000\n\
+    uvicorn inbound.main:app --host 127.0.0.1 --port 5000\n\
     ' > /app/start-app.sh && chmod +x /app/start-app.sh
 
-EXPOSE 8000
+EXPOSE 4000
 
 CMD ["/app/start-app.sh"]

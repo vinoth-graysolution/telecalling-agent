@@ -11,6 +11,7 @@ import CallLog from './vendor/pages/CallLog';
 import Escalations from './vendor/pages/Escalations';
 import PatientHistory from './vendor/pages/PatientHistory';
 import Settings from './vendor/pages/Settings';
+import Campaigns from './vendor/pages/Campaigns';
 
 const App = () => {
   const { isAuthenticated, user, login } = useAuth();
@@ -41,6 +42,7 @@ const App = () => {
         <Route path="call-log" element={<CallLog />} />
         <Route path="escalations" element={<Escalations />} />
         <Route path="patients" element={<PatientHistory />} />
+        <Route path="campaigns" element={<Campaigns />} />
         <Route path="settings" element={<Settings />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

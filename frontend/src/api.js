@@ -82,3 +82,20 @@ export const startOutboundCall = (phoneNumber) =>
       phone_number: phoneNumber
     }
   });
+
+export const getPatients = async (page = 1, pageSize = 20) => {
+  const data = await api.get(`/patients?page=${page}&page_size=${pageSize}`);
+  return data;
+};
+
+export const getPatientHistory = async (phone) => {
+  const data = await api.get(`/patients/${phone}/history`);
+  return data;
+};
+
+export const getLiveCalls = async () => {
+  const data = await api.get('/dashboard/live');
+  return data;
+};
+
+export default api;

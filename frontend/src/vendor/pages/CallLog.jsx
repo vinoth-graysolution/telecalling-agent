@@ -1,34 +1,16 @@
-import React, { useState } from 'react';
-import { Calendar, ChevronDown, ChevronUp, Phone } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Calendar, ChevronDown, ChevronUp, Phone, Loader2, ArrowLeft, ArrowRight } from 'lucide-react';
+import { getCallLogs } from '../../api';
+import TranscriptModal from '../../components/TranscriptModal';
 
-const MOCK_CALLS = [
-  { 
-    id: 1, 
-    caller: '+91 98765 43210', 
-    date: 'Jan 24, 2025 · 05:42 PM', 
-    duration: '2m 14s', 
-    lang: 'Tamil', 
-    intent: 'Book Appointment', 
-    outcome: 'Resolved',
-    transcriptSummary: 'Patient called to book a regular cleaning. AI successfully checked the clinic schedule for next Tuesday and booked a 9:00 AM slot.',
-    reasoning: 'AI matched the "cleaning" request to the "General Checkup" treatment type and verified availability using the check_availability tool.'
-  },
-  { id: 2, caller: '+91 87654 32109', date: 'Jan 24, 2025 · 04:58 PM', duration: '1m 47s', lang: 'English', intent: 'Cancel Appointment', outcome: 'Resolved' },
-  { id: 3, caller: '+91 76543 21098', date: 'Jan 24, 2025 · 04:15 PM', duration: '3m 02s', lang: 'Tamil', intent: 'Reschedule Appointment', outcome: 'Transferred' },
-  { id: 4, caller: '+91 65432 10987', date: 'Jan 24, 2025 · 03:30 PM', duration: '0m 38s', lang: 'English', intent: 'Enquiry', outcome: 'Escalated' },
-  { id: 5, caller: '+91 54321 09876', date: 'Jan 24, 2025 · 02:55 PM', duration: '0m 00s', lang: 'Tamil', intent: 'Unknown', outcome: 'Missed' },
-  { id: 6, caller: '+91 43210 98765', date: 'Jan 24, 2025 · 01:20 PM', duration: '1m 55s', lang: 'English', intent: 'Check Slot', outcome: 'Resolved' },
-  { id: 7, caller: '+91 32109 87654', date: 'Jan 24, 2025 · 12:10 PM', duration: '2m 30s', lang: 'Tamil', intent: 'Book Appointment', outcome: 'Resolved' },
-  { id: 8, caller: '+91 21098 76543', date: 'Jan 24, 2025 · 11:05 AM', duration: '1m 12s', lang: 'English', intent: 'Cancel Appointment', outcome: 'Resolved' },
-];
-
-const FilterPills = ({ label, options, active }) => (
+const FilterPills = ({ label, options, active, onChange }) => (
   <div className="flex items-center gap-3">
     <span className="text-xs font-semibold text-gray-500">{label}</span>
     <div className="flex bg-gray-50 p-1 rounded-lg border border-gray-200">
       {options.map(opt => (
         <button 
           key={opt}
+          onClick={() => onChange(opt)}
           className={`px-3 py-1.5 text-[11px] font-bold rounded-md transition-colors ${opt === active ? 'bg-gray-900 text-white' : 'text-gray-600 hover:text-gray-900'}`}
         >
           {opt}
@@ -40,21 +22,57 @@ const FilterPills = ({ label, options, active }) => (
 
 const OutcomeBadge = ({ outcome }) => {
   let bgColor, textColor;
-  switch(outcome) {
-    case 'Resolved': bgColor = 'bg-emerald-100'; textColor = 'text-emerald-700'; break;
-    case 'Transferred': bgColor = 'bg-amber-100'; textColor = 'text-amber-700'; break;
-    case 'Escalated': bgColor = 'bg-rose-100'; textColor = 'text-rose-700'; break;
-    case 'Missed': bgColor = 'bg-gray-100'; textColor = 'text-gray-700'; break;
-    default: bgColor = 'bg-gray-100'; textColor = 'text-gray-700';
+  const s = outcome?.toLowerCase() || '';
+  if (s === 'completed' || s === 'resolved') {
+    bgColor = 'bg-emerald-100'; textColor = 'text-emerald-700';
+  } else if (s === 'transferred') {
+    bgColor = 'bg-amber-100'; textColor = 'text-amber-700';
+  } else if (s === 'failed' || s === 'escalated') {
+    bgColor = 'bg-rose-100'; textColor = 'text-rose-700';
+  } else if (s === 'missed' || s === 'no-answer') {
+    bgColor = 'bg-gray-100'; textColor = 'text-gray-700';
+  } else {
+    bgColor = 'bg-gray-100'; textColor = 'text-gray-700';
   }
-  return <span className={`px-2.5 py-1 text-[10px] font-bold rounded-full ${bgColor} ${textColor}`}>{outcome}</span>;
+  return <span className={`px-2.5 py-1 text-[10px] font-bold rounded-full ${bgColor} ${textColor}`}>{outcome || 'Unknown'}</span>;
 }
 
 const CallLog = () => {
   const [expandedId, setExpandedId] = useState(null);
+  const [logs, setLogs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [statusFilter, setStatusFilter] = useState('All');
+  
+  // Transcript Modal State
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedCall, setSelectedCall] = useState(null);
+
+  useEffect(() => {
+    const fetchLogs = async () => {
+      try {
+        setLoading(true);
+        const filter = statusFilter === 'All' ? null : statusFilter.toLowerCase();
+        const data = await getCallLogs(page, filter);
+        setLogs(data.logs || []);
+        setTotal(data.total || 0);
+      } catch (err) {
+        console.error('Failed to fetch call logs:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchLogs();
+  }, [page, statusFilter]);
 
   const toggleExpand = (id) => {
     setExpandedId(expandedId === id ? null : id);
+  };
+
+  const openTranscript = (call) => {
+    setSelectedCall(call);
+    setIsModalOpen(true);
   };
 
   return (
@@ -81,95 +99,141 @@ const CallLog = () => {
 
            <div className="h-6 w-px bg-gray-200 hidden md:block"></div>
            
-           <FilterPills label="Outcome" options={['All', 'Resolved', 'Transferred', 'Escalated', 'Missed']} active="All" />
+           <FilterPills 
+             label="Outcome" 
+             options={['All', 'Completed', 'Failed', 'No-Answer']} 
+             active={statusFilter} 
+             onChange={setStatusFilter}
+           />
            
            <div className="h-6 w-px bg-gray-200 hidden md:block"></div>
 
-           <FilterPills label="Language" options={['All', 'Tamil', 'English']} active="All" />
-
-           <div className="ml-auto text-xs text-gray-400 font-medium pt-2 md:pt-0">
-             10 results
+           <div className="ml-auto text-xs text-gray-400 font-bold uppercase tracking-widest pt-2 md:pt-0">
+             {total} results
            </div>
         </div>
 
         {/* List */}
         <div className="overflow-x-auto -mx-6">
-          <table className="w-full">
-            <thead>
-              <tr className="bg-white">
-                <th className="pl-6">Caller Number</th>
-                <th>Date & Time</th>
-                <th>Duration</th>
-                <th>Language</th>
-                <th>Intent</th>
-                <th>Outcome</th>
-                <th className="w-10"></th>
-              </tr>
-            </thead>
-            <tbody className="text-sm">
-              {MOCK_CALLS.map((call) => (
-                <React.Fragment key={call.id}>
-                  <tr 
-                    onClick={() => toggleExpand(call.id)}
-                    className={`border-b border-gray-50 last:border-0 cursor-pointer transition-colors ${expandedId === call.id ? 'bg-gray-50/50' : 'hover:bg-gray-50/30'}`}
-                  >
-                    <td className="pl-6 py-4">
-                       <div className="flex items-center gap-3">
-                          <div className="p-1.5 bg-gray-50 rounded-full text-gray-500"><Phone size={12} fill="currentColor" /></div>
-                          <span className="font-semibold text-gray-900">{call.caller}</span>
-                       </div>
-                    </td>
-                    <td className="text-gray-500">{call.date}</td>
-                    <td className="text-gray-500 py-4">
-                       <div className="flex items-center gap-1.5 h-full">
-                         <span className="text-gray-400 text-[10px]">⏰</span> {call.duration}
-                       </div>
-                    </td>
-                    <td className="text-gray-600">
-                       <div className="flex items-center gap-1.5">
-                         <span className="text-gray-400 font-serif text-[10px] font-bold">文A</span> {call.lang}
-                       </div>
-                    </td>
-                    <td className="text-gray-600">{call.intent}</td>
-                    <td><OutcomeBadge outcome={call.outcome} /></td>
-                    <td className="pr-6 text-gray-400">
-                      {expandedId === call.id ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                    </td>
-                  </tr>
-                  {expandedId === call.id && (
-                    <tr className="bg-gray-50/30">
-                      <td colSpan="7" className="px-6 py-4 border-b border-gray-100">
-                        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm space-y-4 animate-in">
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 font-medium">
-                            <div className="space-y-3">
-                               <h4 className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">Transcript Summary</h4>
-                               <p className="text-sm text-gray-700 leading-relaxed italic border-l-2 border-gray-100 pl-4">
-                                 "{call.transcriptSummary || "Detailed transcript summary is unavailable for this log."}"
-                               </p>
-                            </div>
-                            <div className="space-y-3">
-                               <h4 className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">AI Decision Note</h4>
-                               <p className="text-sm text-gray-600">
-                                 {call.reasoning || "No automated process notes exist for this interaction."}
-                               </p>
-                               <div className="pt-2">
-                                  <button className="text-xs font-bold text-gray-900 underline underline-offset-4 hover:text-gray-600">View Full Transcript &rarr;</button>
-                               </div>
-                            </div>
-                          </div>
-                        </div>
+          {loading ? (
+            <div className="flex flex-col items-center py-20 gap-4">
+               <Loader2 className="animate-spin text-gray-200" size={40} />
+               <p className="text-sm font-bold text-gray-400 uppercase tracking-widest">Retrieving Logs...</p>
+            </div>
+          ) : (
+            <table className="w-full">
+              <thead>
+                <tr className="bg-white">
+                  <th className="pl-6">Caller Number</th>
+                  <th>Date & Time</th>
+                  <th>Duration</th>
+                  <th>Direction</th>
+                  <th>Outcome</th>
+                  <th className="w-10"></th>
+                </tr>
+              </thead>
+              <tbody className="text-sm">
+                {logs.map((call) => (
+                  <React.Fragment key={call.id}>
+                    <tr 
+                      onClick={() => toggleExpand(call.id)}
+                      className={`border-b border-gray-50 last:border-0 cursor-pointer transition-colors ${expandedId === call.id ? 'bg-gray-50/50' : 'hover:bg-gray-50/30'}`}
+                    >
+                      <td className="pl-6 py-4">
+                         <div className="flex items-center gap-3">
+                            <div className="p-1.5 bg-gray-50 rounded-full text-gray-500"><Phone size={12} fill="currentColor" /></div>
+                            <span className="font-semibold text-gray-900">{call.caller_phone}</span>
+                         </div>
+                      </td>
+                      <td className="text-gray-500 font-medium">{new Date(call.date).toLocaleString()}</td>
+                      <td className="text-gray-500 py-4">
+                         <div className="flex items-center gap-1.5 h-full">
+                           <span className="text-gray-400 text-[10px]">⏰</span> {call.duration}
+                         </div>
+                      </td>
+                      <td className="text-gray-600 capitalize font-bold text-[11px] tracking-tight">{call.direction}</td>
+                      <td><OutcomeBadge outcome={call.status} /></td>
+                      <td className="pr-6 text-gray-400">
+                        {expandedId === call.id ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                       </td>
                     </tr>
-                  )}
-                </React.Fragment>
-              ))}
-            </tbody>
-          </table>
+                    {expandedId === call.id && (
+                      <tr className="bg-gray-50/30">
+                        <td colSpan="6" className="px-6 py-4 border-b border-gray-100">
+                          <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm space-y-4 animate-in fade-in slide-in-from-top-2">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 font-medium">
+                              <div className="space-y-3">
+                                 <h4 className="text-[11px] font-black text-gray-400 uppercase tracking-widest">Transcript Snippet</h4>
+                                 <p className="text-sm text-gray-700 leading-relaxed italic border-l-2 border-gray-100 pl-4">
+                                   "{call.transcript ? (call.transcript.substring(0, 150) + '...') : "No transcript snippet available."}"
+                                 </p>
+                              </div>
+                              <div className="space-y-3">
+                                 <h4 className="text-[11px] font-black text-gray-400 uppercase tracking-widest">AI Audit Actions</h4>
+                                 <p className="text-sm text-gray-500 leading-relaxed">
+                                   Detailed processing notes for this interaction are available in the full session log.
+                                 </p>
+                                 <div className="pt-2">
+                                    <button 
+                                      onClick={() => openTranscript(call)}
+                                      className="inline-flex items-center gap-2 px-4 py-2 bg-gray-900 text-white text-[11px] font-bold rounded-lg hover:bg-gray-800 transition-all shadow-md shadow-gray-100"
+                                    >
+                                      View Full Transcript &rarr;
+                                    </button>
+                                 </div>
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                ))}
+                {logs.length === 0 && (
+                  <tr>
+                    <td colSpan="6" className="text-center py-20 text-gray-400 font-medium">No call logs found in the database.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          )}
         </div>
+
+        {/* Pagination */}
+        {!loading && total > 0 && (
+          <div className="flex items-center justify-between border-t border-gray-100 pt-6 mt-4">
+             <div className="text-xs font-bold text-gray-400 uppercase tracking-widest">
+               Page {page} of {Math.ceil(total / 20)}
+             </div>
+             <div className="flex items-center gap-2">
+                <button 
+                  disabled={page === 1}
+                  onClick={() => setPage(p => p - 1)}
+                  className="p-2 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-30 transition-colors"
+                >
+                   <ArrowLeft size={16} />
+                </button>
+                <button 
+                  disabled={page * 20 >= total}
+                  onClick={() => setPage(p => p + 1)}
+                  className="p-2 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-30 transition-colors"
+                >
+                   <ArrowRight size={16} />
+                </button>
+             </div>
+          </div>
+        )}
       </div>
+
+      <TranscriptModal 
+        isOpen={isModalOpen} 
+        onClose={() => setIsModalOpen(false)} 
+        transcript={selectedCall?.transcript} 
+        caller={selectedCall?.caller_phone} 
+        date={selectedCall ? new Date(selectedCall.date).toLocaleString() : ''}
+      />
     </div>
   );
 };
 
 export default CallLog;
-

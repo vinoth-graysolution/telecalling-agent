@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { AlertTriangle, Eye, CheckCircle2, Phone, Tag, ChevronDown, ChevronUp, MessageSquare, User, ArrowUp, ArrowDown, Send, FileText, Bot, Clock, Calendar } from 'lucide-react';
-import { getCallLogs } from '../../api';
+import { AlertTriangle, Eye, CheckCircle2, Phone, Tag, ChevronDown, ChevronUp, MessageSquare, User, ArrowUp, ArrowDown, Send, FileText, Bot, Clock, Calendar, Loader2 } from 'lucide-react';
+import { getCallLogs, getStats, startOutboundCall } from '../../api';
+import TranscriptModal from '../../components/TranscriptModal';
+import Toast from '../../components/Toast';
 
 const StatCard = ({ icon: Icon, value, label, iconColor, iconBgColor }) => (
   <div className="bg-white rounded-2xl border border-gray-200 p-6 flex flex-col justify-center h-28 shadow-sm">
@@ -55,15 +57,32 @@ const StatusBadge = ({ status }) => {
 
 const Escalations = () => {
   const [escalations, setEscalations] = useState([]);
+  const [stats, setStats] = useState({ open: 0, review: 0, resolved: 0 });
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState(null);
   const [newNote, setNewNote] = useState('');
+  const [callingId, setCallingId] = useState(null);
+  const [toast, setToast] = useState(null);
+  
+  // Transcript Modal State
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedCall, setSelectedCall] = useState(null);
 
   useEffect(() => {
     const loadEscalations = async () => {
       try {
-        const data = await getCallLogs(1, 'failed');
-        setEscalations(data.logs || []);
+        const [logData, statsData] = await Promise.all([
+          getCallLogs(1, 'failed'),
+          getStats()
+        ]);
+        setEscalations(logData.logs || []);
+        
+        // Map stats if available
+        if (statsData?.analytics?.outcomes) {
+           const open = statsData.analytics.outcomes.find(o => o.status === 'failed')?.count || 0;
+           const resolved = statsData.analytics.outcomes.find(o => o.status === 'completed')?.count || 0;
+           setStats({ open, review: 0, resolved });
+        }
       } catch (err) {
         console.error('Failed to load escalations:', err);
       } finally {
@@ -96,6 +115,23 @@ const Escalations = () => {
     setNewNote('');
   };
 
+  const handleCallNow = async (id, phone) => {
+    try {
+      setCallingId(id);
+      await startOutboundCall(phone);
+      setToast({ message: `Outbound call triggered for ${phone}`, type: 'success' });
+    } catch (err) {
+      setToast({ message: 'Failed to trigger outbound call: ' + err.message, type: 'error' });
+    } finally {
+      setCallingId(null);
+    }
+  };
+
+  const openTranscript = (call) => {
+    setSelectedCall(call);
+    setIsModalOpen(true);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -106,9 +142,9 @@ const Escalations = () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 font-medium">
-         <StatCard icon={AlertTriangle} value="3" label="Open Issues" iconColor="text-rose-600" iconBgColor="bg-rose-50" />
-         <StatCard icon={Eye} value="2" label="In Review" iconColor="text-amber-600" iconBgColor="bg-amber-50" />
-         <StatCard icon={CheckCircle2} value="2" label="Resolved" iconColor="text-emerald-600" iconBgColor="bg-emerald-50" />
+         <StatCard icon={AlertTriangle} value={stats.open} label="Open Issues" iconColor="text-rose-600" iconBgColor="bg-rose-50" />
+         <StatCard icon={Eye} value={stats.review} label="In Review" iconColor="text-amber-600" iconBgColor="bg-amber-50" />
+         <StatCard icon={CheckCircle2} value={stats.resolved} label="Resolved" iconColor="text-emerald-600" iconBgColor="bg-emerald-50" />
       </div>
 
       <div className="bg-white border border-gray-200 shadow-sm rounded-2xl p-4 flex items-center gap-8 overflow-x-auto whitespace-nowrap scrollbar-hide">
@@ -168,6 +204,21 @@ const Escalations = () => {
                     <div className="flex items-center gap-1.5 text-[11px] font-bold text-gray-400 w-8">
                        <MessageSquare size={14} /> {esc.messages || 0}
                     </div>
+                     <button 
+                       onClick={(e) => {
+                         e.stopPropagation();
+                         handleCallNow(esc.id, esc.caller || esc.caller_phone);
+                       }}
+                       disabled={callingId === esc.id}
+                       className="flex items-center gap-2 px-3 py-1.5 bg-gray-900 text-white rounded-lg text-[10px] font-bold hover:bg-gray-800 disabled:opacity-50 transition-colors ml-4"
+                     >
+                       {callingId === esc.id ? (
+                         <Loader2 size={12} className="animate-spin" />
+                       ) : (
+                         <Phone size={12} fill="currentColor" />
+                       )}
+                       Call Now
+                     </button>
                  </div>
 
                 <div className="text-gray-300 pl-4 border-l border-gray-100">
@@ -193,6 +244,14 @@ const Escalations = () => {
                          <p className="text-sm text-gray-700 leading-relaxed font-medium italic">
                             {esc.aiDecision || "Defaulting to human triage based on call complexity."}
                          </p>
+                         <div className="pt-2">
+                           <button 
+                             onClick={() => openTranscript(esc)}
+                             className="text-xs font-bold text-gray-900 underline underline-offset-4 hover:text-gray-600"
+                           >
+                             View Full Transcript &rarr;
+                           </button>
+                         </div>
                       </div>
                       <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm space-y-4">
                          <div className="flex items-center gap-2 text-[10px] font-black text-gray-400 uppercase tracking-[2px]">
@@ -260,10 +319,17 @@ const Escalations = () => {
           ))
          )}
       </div>
+
+      <TranscriptModal 
+        isOpen={isModalOpen} 
+        onClose={() => setIsModalOpen(false)} 
+        transcript={selectedCall?.transcript} 
+        caller={selectedCall?.caller || selectedCall?.caller_phone} 
+        date={selectedCall?.date || ''}
+      />
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </div>
   );
 };
 
 export default Escalations;
-
-
