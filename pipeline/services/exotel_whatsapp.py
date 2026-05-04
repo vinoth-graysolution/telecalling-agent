@@ -11,6 +11,7 @@ def send_whatsapp_appointment_confirmation(
     patient_name: str,
     appointment_date: str,
     appointment_time: str,
+    doctor: str = "Dr. Anjali Rao",
 ) -> bool:
     """
     Send a WhatsApp appointment confirmation message via Exotel.
@@ -20,6 +21,7 @@ def send_whatsapp_appointment_confirmation(
         patient_name: Full name of the patient
         appointment_date: Date string in YYYY-MM-DD format
         appointment_time: Time string in HH:MM format (24-hour)
+        doctor: Assigned doctor's full name (default: "Dr. Anjali Rao")
 
     Returns:
         True if message was sent successfully, False otherwise.
@@ -62,12 +64,16 @@ def send_whatsapp_appointment_confirmation(
 
     message_text = (
         f"Hi {patient_name}! 👋\n\n"
-        f"✅ Your appointment has been *confirmed*.\n\n"
-        f"📅 Date : {friendly_date}\n"
-        f"⏰ Time : {friendly_time}\n\n"
-        f"Please arrive 5 minutes early. "
-        f"To reschedule or cancel, please call us back.\n\n"
-        f"— Gray Solutions Clinic 🏥"
+        f"✅ Your appointment at *Whitepoint Dental Studio* is confirmed.\n\n"
+        f"👨‍⚕️ Doctor : {doctor}\n"
+        f"📅 Date   : {friendly_date}\n"
+        f"⏰ Time   : {friendly_time}\n\n"
+        f"📍 *Location:* 100 Feet Road, Indiranagar, Bangalore\n"
+        f"(Near Indiranagar Metro Station)\n"
+        f"🗺️ Map: https://maps.app.goo.gl/WhitepointDentalIndiranagar\n\n"
+        f"Please arrive 5 minutes early. Carry any past dental records if available.\n"
+        f"To reschedule or cancel, call us back anytime.\n\n"
+        f"— Whitepoint Dental Studio 🦷"
     )
 
     url = (

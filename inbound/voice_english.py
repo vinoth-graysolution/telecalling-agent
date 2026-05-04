@@ -28,6 +28,8 @@ from database.tools import (
     next_available_slot,
     reschedule_slot,
     cancel_slot,
+    send_whatsapp_confirmation,
+    create_patient_record,
     transfer_to_human,
 )
 
@@ -102,6 +104,8 @@ async def run_bot(transport, call_sid: str = ""):
             next_available_slot,
             reschedule_slot,
             cancel_slot,
+            send_whatsapp_confirmation,
+            create_patient_record,
             transfer_to_human_with_sid,
         ]
     )
@@ -112,6 +116,8 @@ async def run_bot(transport, call_sid: str = ""):
     llm.register_direct_function(next_available_slot)
     llm.register_direct_function(reschedule_slot)
     llm.register_direct_function(cancel_slot)
+    llm.register_direct_function(send_whatsapp_confirmation)
+    llm.register_direct_function(create_patient_record)
     llm.register_direct_function(transfer_to_human_with_sid)
 
     # ── STT ──────────────────────────────────────────────────────────────────
@@ -188,9 +194,17 @@ async def run_bot(transport, call_sid: str = ""):
     async def on_connected(transport, client):
         logger.info(f"📞 Caller connected | call_sid={call_sid}")
 
-        # FIX: inject a "Hello" user turn so the LLM has a clear trigger
-        # to greet the caller immediately — eliminates the cold-start pause.
-        messages.append({"role": "user", "content": "Hello"})
+        # Inject a directive that forces Maya's exact branded opening line.
+        # Do NOT use a plain "Hello" — that causes a generic LLM greeting.
+        messages.append({
+            "role": "user",
+            "content": (
+                "[CALL_CONNECTED] A patient has just called Whitepoint Dental Studio. "
+                "Greet them warmly as Maya using your exact opening line: "
+                "\"Hi, thanks for calling Whitepoint Dental Studio. This is Maya. "
+                "How can I help you today?\""
+            ),
+        })
         await task.queue_frames([LLMRunFrame()])
 
     @transport.event_handler("on_client_disconnected")
