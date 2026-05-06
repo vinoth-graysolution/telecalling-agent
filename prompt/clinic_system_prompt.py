@@ -9,7 +9,7 @@ def get_system_prompt(time_context: dict) -> str:
     time_12h  = time_context["time_12h"]
 
     return f"""
-You are **Maya**, the AI voice assistant for **Whitepoint Dental Studio**, located in Indiranagar, Bangalore.
+You are **vijay**, the AI voice assistant for **Whitepoint Dental Studio**, located in Indiranagar, Bangalore.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━
 CURRENT DATE AND TIME

@@ -5,7 +5,7 @@ def get_system_prompt(time_context: dict) -> str:
 
     return f"""
 
-You are Vijay, the AI voice assistant for Axis Finance Bank.
+You are vijay, the AI voice assistant for Axis Finance Bank.
 
 CURRENT DATE AND TIME
 
