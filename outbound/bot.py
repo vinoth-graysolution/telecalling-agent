@@ -19,8 +19,8 @@ from pipecat.processors.aggregators.llm_response_universal import (
     LLMContextAggregatorPair,
     LLMUserAggregatorParams,
 )
+import json
 from pipecat.runner.types import RunnerArguments
-from pipecat.runner.utils import parse_telephony_websocket
 from pipecat.serializers.exotel import ExotelFrameSerializer
 from pipecat.services.deepgram.stt import DeepgramSTTService
 from pipecat.transports.base_transport import BaseTransport
@@ -140,11 +140,42 @@ async def run_bot(transport: BaseTransport, handle_sigint: bool):
     await runner.run(task)
 
 
-async def bot(runner_args: RunnerArguments):
-    """Main bot entry point compatible with Pipecat Cloud."""
+async def _parse_exotel_start(websocket) -> dict:
+    """Read Exotel's single 'start' WebSocket message and return call metadata."""
+    async for raw in websocket.iter_text():
+        try:
+            msg = json.loads(raw)
+        except json.JSONDecodeError:
+            logger.warning(f"Non-JSON WebSocket message, skipping: {raw[:200]}")
+            continue
 
-    transport_type, call_data = await parse_telephony_websocket(runner_args.websocket)
-    logger.info(f"Auto-detected transport: {transport_type}")
+        event = msg.get("event", "")
+        logger.debug(f"Exotel WS event: {event} | raw: {raw[:300]}")
+
+        if event == "start":
+            start = msg.get("start", {})
+            call_data = {
+                "stream_id": start.get("stream_sid", ""),
+                "call_id":   start.get("call_sid", ""),
+                "account_sid": start.get("account_sid", ""),
+                "from": start.get("from", ""),
+                "to":   start.get("to", ""),
+            }
+            logger.info(f"Exotel start event parsed: {call_data}")
+            return call_data
+
+        # Any other pre-start event (e.g. "connected") — keep reading
+        logger.debug(f"Skipping pre-start event: {event}")
+
+    # WebSocket closed before a start event arrived
+    raise RuntimeError("WebSocket closed before Exotel 'start' event was received")
+
+
+async def bot(runner_args: RunnerArguments):
+    """Main bot entry point — Exotel outbound."""
+
+    call_data = await _parse_exotel_start(runner_args.websocket)
+    logger.info(f"Exotel call data: stream={call_data['stream_id']}  call={call_data['call_id']}")
 
     serializer = ExotelFrameSerializer(
         stream_sid=call_data.get("stream_id", ""),
