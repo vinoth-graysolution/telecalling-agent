@@ -157,7 +157,12 @@ async def websocket_endpoint(websocket: WebSocket):
 
     except Exception as e:
         print(f"Error in WebSocket endpoint: {e}")
-        await websocket.close()
+        from starlette.websockets import WebSocketState
+        if websocket.client_state != WebSocketState.DISCONNECTED:
+            try:
+                await websocket.close()
+            except Exception:
+                pass  # Already closed — ignore
 
 
 # ----------------- Main ----------------- #

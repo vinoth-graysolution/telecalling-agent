@@ -19,11 +19,9 @@ from pipecat.processors.aggregators.llm_response_universal import (
     LLMContextAggregatorPair,
     LLMUserAggregatorParams,
 )
+import json
 from pipecat.runner.types import RunnerArguments
-from pipecat.runner.utils import parse_telephony_websocket
 from pipecat.serializers.exotel import ExotelFrameSerializer
-from pipecat.services.sarvam import SarvamTTSService
-from pipecat.transcriptions.language import Language
 from pipecat.services.deepgram.stt import DeepgramSTTService
 from pipecat.transports.base_transport import BaseTransport
 
@@ -35,10 +33,22 @@ from pipeline.transports.fastapi import (
     FastAPIWebsocketTransport,
 )
 from pipeline.services.openai.llm import OpenAILLMService
+<<<<<<< HEAD
 
 from database.utils import get_system_config
+=======
+# from pipecat.services.elevenlabs.tts import ElevenLabsHttpTTSService
+from pipecat.services.sarvam import SarvamTTSService
+from prompt.banking_prompt import get_system_prompt
+from pipecat.transcriptions.language import Language
+>>>>>>> main
 from database.time_utils import get_current_context
 from database.call_logger import save_call_log, get_transcript_summary
+
+TTS_MODEL       = "bulbul:v3-beta"
+TTS_VOICE       = "shubh"
+TTS_PACE        = 1.1
+TTS_TEMPERATURE = 0.01
 
 load_dotenv(override=True)
 
@@ -55,14 +65,15 @@ async def run_bot(transport: BaseTransport, handle_sigint: bool, phone: str = "u
         language="en-IN",
     )
 
+    
     tts = SarvamTTSService(
         api_key=os.getenv("SARVAM_API_KEY"),
-        model="bulbul:v3-beta",
-        voice_id="shubh",
+        model=TTS_MODEL,
+        voice_id=TTS_VOICE,
         params=SarvamTTSService.InputParams(
             language=Language.EN,
-            pace=1.1,
-            temperature=0.01,
+            pace=TTS_PACE,
+            temperature=TTS_TEMPERATURE,
         ),
     )
 
@@ -109,10 +120,22 @@ async def run_bot(transport: BaseTransport, handle_sigint: bool, phone: str = "u
 
     @transport.event_handler("on_client_connected")
     async def on_client_connected(transport, client):
-        logger.info("📞 Outbound call connected — triggering greeting")
-        # Inject a "Hello" user turn so the LLM greets the caller immediately
-        messages.append({"role": "user", "content": "Hello"})
+        logger.info("📞 Outbound call connected — vijay will greet the customer")
+        logger.info("🤖 Injecting [CALL STARTED] trigger to fire LLM → TTS → Audio pipeline")
+        # Inject a system-level user turn to tell the LLM to start the call.
+        # Maya will immediately say "Hello, am I speaking with Praveen Kumar?"
+        # and then follow the structured IDENTITY → DISCLOSURE → EMI_DETAILS → CLOSING flow.
+        messages.append({
+            "role": "user",
+            "content": (
+                "[CALL STARTED] The customer has just picked up the phone. "
+                "Begin the call immediately with the IDENTITY verification step. "
+                "Greet naturally and ask to confirm the customer's name."
+            ),
+        })
+        logger.info("📤 Queuing LLMRunFrame to trigger vijay's opening greeting...")
         await task.queue_frames([LLMRunFrame()])
+        logger.info("✅ LLMRunFrame queued — waiting for LLM response and TTS audio")
 
     @transport.event_handler("on_client_disconnected")
     async def on_client_disconnected(transport, client):
@@ -145,11 +168,42 @@ async def run_bot(transport: BaseTransport, handle_sigint: bool, phone: str = "u
     await runner.run(task)
 
 
-async def bot(runner_args: RunnerArguments):
-    """Main bot entry point compatible with Pipecat Cloud."""
+async def _parse_exotel_start(websocket) -> dict:
+    """Read Exotel's single 'start' WebSocket message and return call metadata."""
+    async for raw in websocket.iter_text():
+        try:
+            msg = json.loads(raw)
+        except json.JSONDecodeError:
+            logger.warning(f"Non-JSON WebSocket message, skipping: {raw[:200]}")
+            continue
 
-    transport_type, call_data = await parse_telephony_websocket(runner_args.websocket)
-    logger.info(f"Auto-detected transport: {transport_type}")
+        event = msg.get("event", "")
+        logger.debug(f"Exotel WS event: {event} | raw: {raw[:300]}")
+
+        if event == "start":
+            start = msg.get("start", {})
+            call_data = {
+                "stream_id": start.get("stream_sid", ""),
+                "call_id":   start.get("call_sid", ""),
+                "account_sid": start.get("account_sid", ""),
+                "from": start.get("from", ""),
+                "to":   start.get("to", ""),
+            }
+            logger.info(f"Exotel start event parsed: {call_data}")
+            return call_data
+
+        # Any other pre-start event (e.g. "connected") — keep reading
+        logger.debug(f"Skipping pre-start event: {event}")
+
+    # WebSocket closed before a start event arrived
+    raise RuntimeError("WebSocket closed before Exotel 'start' event was received")
+
+
+async def bot(runner_args: RunnerArguments):
+    """Main bot entry point — Exotel outbound."""
+
+    call_data = await _parse_exotel_start(runner_args.websocket)
+    logger.info(f"Exotel call data: stream={call_data['stream_id']}  call={call_data['call_id']}")
 
     serializer = ExotelFrameSerializer(
         stream_sid=call_data.get("stream_id", ""),

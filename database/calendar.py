@@ -20,23 +20,30 @@ def _get_calendar_service():
     return service
 
 
-def _build_event_body(name: str, phone: str, date: str, time: str) -> dict:
+def _build_event_body(name: str, phone: str, date: str, time: str, doctor: str = "Dr. Anjali Rao") -> dict:
     """
     Build the Google Calendar event body.
 
     Args:
-        name: Patient full name
-        phone: Patient phone number
-        date: Date in YYYY-MM-DD format
-        time: Time in HH:MM 24-hour format
+        name:   Patient full name
+        phone:  Patient phone number
+        date:   Date in YYYY-MM-DD format
+        time:   Time in HH:MM 24-hour format
+        doctor: Assigned doctor full name
     """
     # Parse date and time into IST datetime
     dt_start = datetime.strptime(f"{date} {time}", "%Y-%m-%d %H:%M").replace(tzinfo=IST)
-    dt_end = dt_start + timedelta(minutes=30)  # Default 30-minute appointment
+    dt_end = dt_start + timedelta(minutes=30)  # Default 30-minute slot
 
     return {
-        "summary": f"Dental Appointment - {name}",
-        "description": f"Patient: {name}\nPhone: {phone}\nBooked via MedVoice AI",
+        "summary": f"[{doctor}] Dental Appt — {name}",
+        "description": (
+            f"Patient : {name}\n"
+            f"Phone   : {phone}\n"
+            f"Doctor  : {doctor}\n"
+            f"Clinic  : Whitepoint Dental Studio, 100 Feet Rd, Indiranagar\n"
+            f"Booked via Maya (AI Voice Assistant)"
+        ),
         "start": {
             "dateTime": dt_start.isoformat(),
             "timeZone": "Asia/Kolkata",
@@ -55,7 +62,7 @@ def _build_event_body(name: str, phone: str, date: str, time: str) -> dict:
     }
 
 
-def create_calendar_event(name: str, phone: str, date: str, time: str) -> str | None:
+def create_calendar_event(name: str, phone: str, date: str, time: str, doctor: str = "Dr. Anjali Rao") -> str | None:
     """
     Create a Google Calendar event for a new appointment.
 
@@ -64,11 +71,11 @@ def create_calendar_event(name: str, phone: str, date: str, time: str) -> str | 
     try:
         service = _get_calendar_service()
         calendar_id = os.getenv("GOOGLE_CALENDAR_ID", "vinoth17170@gmail.com")
-        event_body = _build_event_body(name, phone, date, time)
+        event_body = _build_event_body(name, phone, date, time, doctor=doctor)
 
         event = service.events().insert(calendarId=calendar_id, body=event_body).execute()
         event_id = event.get("id")
-        logger.info(f"📅 Calendar event created: {event_id} for {name} on {date} at {time}")
+        logger.info(f"📅 Calendar event created: {event_id} | {name} with {doctor} on {date} at {time}")
         return event_id
 
     except Exception as e:
@@ -105,6 +112,7 @@ def update_calendar_event(
     phone: str,
     new_date: str,
     new_time: str,
+    doctor: str = "Dr. Anjali Rao",
 ) -> bool:
     """
     Update an existing Google Calendar event to a new date/time.
@@ -118,14 +126,14 @@ def update_calendar_event(
     try:
         service = _get_calendar_service()
         calendar_id = os.getenv("GOOGLE_CALENDAR_ID", "vinoth17170@gmail.com")
-        event_body = _build_event_body(name, phone, new_date, new_time)
+        event_body = _build_event_body(name, phone, new_date, new_time, doctor=doctor)
 
         service.events().update(
             calendarId=calendar_id,
             eventId=event_id,
             body=event_body,
         ).execute()
-        logger.info(f"📅 Calendar event updated: {event_id} → {new_date} at {new_time}")
+        logger.info(f"📅 Calendar event updated: {event_id} | {doctor} → {new_date} at {new_time}")
         return True
 
     except Exception as e:
