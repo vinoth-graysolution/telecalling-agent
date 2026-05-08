@@ -33,17 +33,11 @@ from pipeline.transports.fastapi import (
     FastAPIWebsocketTransport,
 )
 from pipeline.services.openai.llm import OpenAILLMService
-<<<<<<< HEAD
-
-from database.utils import get_system_config
-=======
 # from pipecat.services.elevenlabs.tts import ElevenLabsHttpTTSService
 from pipecat.services.sarvam import SarvamTTSService
 from prompt.banking_prompt import get_system_prompt
 from pipecat.transcriptions.language import Language
->>>>>>> main
 from database.time_utils import get_current_context
-from database.call_logger import save_call_log, get_transcript_summary
 
 TTS_MODEL       = "bulbul:v3-beta"
 TTS_VOICE       = "shubh"
@@ -53,7 +47,7 @@ TTS_TEMPERATURE = 0.01
 load_dotenv(override=True)
 
 
-async def run_bot(transport: BaseTransport, handle_sigint: bool, phone: str = "unknown"):
+async def run_bot(transport: BaseTransport, handle_sigint: bool):
     llm = OpenAILLMService(
         api_key=os.getenv("OPENAI_API_KEY"),
         model="gpt-4o-mini",
@@ -81,7 +75,7 @@ async def run_bot(transport: BaseTransport, handle_sigint: bool, phone: str = "u
     messages = [
         {
             "role": "system",
-            "content": get_system_config("outbound_prompt").format(**time_context),
+            "content": get_system_prompt(time_context),
         }
     ]
 
@@ -139,29 +133,7 @@ async def run_bot(transport: BaseTransport, handle_sigint: bool, phone: str = "u
 
     @transport.event_handler("on_client_disconnected")
     async def on_client_disconnected(transport, client):
-        logger.info(f"📴 Outbound call to {phone} disconnected")
-        
-        # Log the call
-        try:
-            call_sid = transport._params.serializer.call_sid
-            # transcript is the full conversation history
-            transcript = "\n".join([f"{m['role']}: {m['content']}" for m in context.messages])
-            summary = get_transcript_summary(context.messages)
-            
-            # Save logs (this handles both local DB and Zoho)
-            save_call_log(
-                call_sid=call_sid,
-                phone=phone,
-                direction="outbound",
-                status="completed",
-                duration=0, # Need to track duration if possible
-                transcript=transcript,
-                summary=summary,
-                decision="Call completed successfully"
-            )
-        except Exception as e:
-            logger.error(f"Failed to log call: {e}")
-            
+        logger.info("📴 Outbound call disconnected")
         await task.cancel()
 
     runner = PipelineRunner(handle_sigint=handle_sigint)
@@ -222,4 +194,4 @@ async def bot(runner_args: RunnerArguments):
 
     handle_sigint = runner_args.handle_sigint
 
-    await run_bot(transport, handle_sigint, call_data.get("to_number", "unknown"))
+    await run_bot(transport, handle_sigint)
