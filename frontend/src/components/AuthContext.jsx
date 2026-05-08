@@ -31,8 +31,17 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [isInitializing, setIsInitializing] = useState(true);
 
-  // On mount – restore session from localStorage
+  // On mount – restore session from localStorage OR URL (for social login)
   useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const tokenFromUrl = urlParams.get('access_token');
+    
+    if (tokenFromUrl) {
+      localStorage.setItem('medvoice_access_token', tokenFromUrl);
+      // Clean up URL
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+
     const token = localStorage.getItem('medvoice_access_token');
     if (token) {
       const payload = parseJwt(token);
@@ -60,10 +69,6 @@ export const AuthProvider = ({ children }) => {
       });
 
       if (!response.ok) {
-        // If password is 'mock', allow login even if server returns error
-        if (password === 'mock') {
-          return useMockLogin(email);
-        }
         throw new Error('Invalid credentials');
       }
 
@@ -77,28 +82,10 @@ export const AuthProvider = ({ children }) => {
       return userObj;
     } catch (error) {
       console.error('Login error:', error);
-      // Fallback for mock login if server is down (e.g., 502 Bad Gateway)
-      if (password === 'mock') {
-        return useMockLogin(email);
-      }
       throw error;
     }
   };
 
-  const useMockLogin = (email) => {
-    const mockPayload = {
-      sub: email,
-      role: 'admin',
-      name: 'Mock Admin',
-      exp: Math.floor(Date.now() / 1000) + 3600
-    };
-    const mockToken = "mock." + btoa(JSON.stringify(mockPayload)) + ".mock";
-    localStorage.setItem('medvoice_access_token', mockToken);
-    const userObj = buildUserFromPayload(mockPayload);
-    setUser(userObj);
-    setIsAuthenticated(true);
-    return userObj;
-  };
 
   // ---------------------------------------------------------------------------
   // logout
@@ -123,8 +110,32 @@ export const AuthProvider = ({ children }) => {
     );
   }
 
+  const forgotPassword = async (email) => {
+    const response = await fetch('/api/auth/forgot-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    if (!response.ok) {
+      const data = await response.json();
+      throw new Error(data.detail || 'Failed to initiate password reset');
+    }
+  };
+
+  const resetPassword = async (email, code, newPassword) => {
+    const response = await fetch('/api/auth/reset-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, code, new_password: newPassword }),
+    });
+    if (!response.ok) {
+      const data = await response.json();
+      throw new Error(data.detail || 'Failed to reset password');
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ isAuthenticated, user, login, logout }}>
+    <AuthContext.Provider value={{ isAuthenticated, user, login, logout, forgotPassword, resetPassword }}>
       {children}
     </AuthContext.Provider>
   );

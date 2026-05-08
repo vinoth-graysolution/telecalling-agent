@@ -2,7 +2,7 @@ from database.db import get_connection
 from integrations.zoho import zoho_service
 from loguru import logger
 
-def save_call_log(call_sid, phone, direction, status, duration, transcript, summary, decision):
+def save_call_log(call_sid, phone, direction, status, duration, transcript, summary, decision, user_id=None):
     """
     Saves a call log to the local database and synchronizes with Zoho CRM if connected.
     """
@@ -28,7 +28,7 @@ def save_call_log(call_sid, phone, direction, status, duration, transcript, summ
 
     # 2. Sync with Zoho CRM
     try:
-        zoho_service.log_call(phone, direction, duration, status, summary)
+        zoho_service.log_call(phone, direction, duration, status, summary, user_id)
     except Exception as e:
         logger.error(f"Failed to sync call log with Zoho: {e}")
 

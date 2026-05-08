@@ -17,17 +17,21 @@ class ZohoCRMService:
         self.client_secret = os.getenv("ZOHO_CLIENT_SECRET")
         self.redirect_uri = os.getenv("ZOHO_REDIRECT_URI")
 
-    def _get_integration_record(self):
+    def _get_integration_record(self, user_id=None):
         conn = get_connection()
         try:
             with conn.cursor() as cur:
-                cur.execute("SELECT * FROM integrations WHERE service_name = 'zoho_crm'")
+                if user_id:
+                    cur.execute("SELECT * FROM integrations WHERE service_name = 'zoho_crm' AND user_id = %s", (user_id,))
+                else:
+                    # Fallback for backward compatibility or global sync
+                    cur.execute("SELECT * FROM integrations WHERE service_name = 'zoho_crm' AND user_id IS NULL")
                 return cur.fetchone()
         finally:
             conn.close()
 
-    def get_access_token(self):
-        record = self._get_integration_record()
+    def get_access_token(self, user_id=None):
+        record = self._get_integration_record(user_id)
         if not record:
             return None
 
@@ -36,10 +40,10 @@ class ZohoCRMService:
             return record['access_token']
 
         # Refresh token
-        return self.refresh_token(record['refresh_token'])
+        return self.refresh_token(record['refresh_token'], user_id)
 
-    def refresh_token(self, refresh_token):
-        logger.info("Refreshing Zoho access token")
+    def refresh_token(self, refresh_token, user_id=None):
+        logger.info(f"Refreshing Zoho access token for user {user_id}")
         url = f"{self.accounts_url}/oauth/v2/token"
         data = {
             "refresh_token": refresh_token,
@@ -61,18 +65,24 @@ class ZohoCRMService:
         conn = get_connection()
         try:
             with conn.cursor() as cur:
-                cur.execute(
-                    "UPDATE integrations SET access_token = %s, token_expiry = %s WHERE service_name = 'zoho_crm'",
-                    (access_token, datetime.now() + timedelta(seconds=expires_in))
-                )
+                if user_id:
+                    cur.execute(
+                        "UPDATE integrations SET access_token = %s, token_expiry = %s WHERE service_name = 'zoho_crm' AND user_id = %s",
+                        (access_token, datetime.now() + timedelta(seconds=expires_in), user_id)
+                    )
+                else:
+                    cur.execute(
+                        "UPDATE integrations SET access_token = %s, token_expiry = %s WHERE service_name = 'zoho_crm' AND user_id IS NULL",
+                        (access_token, datetime.now() + timedelta(seconds=expires_in))
+                    )
                 conn.commit()
         finally:
             conn.close()
             
         return access_token
 
-    def fetch_leads(self):
-        token = self.get_access_token()
+    def fetch_leads(self, user_id=None):
+        token = self.get_access_token(user_id)
         if not token:
             return []
 
@@ -86,8 +96,8 @@ class ZohoCRMService:
             
         return response.json().get("data", [])
 
-    def log_call(self, phone, direction, duration, status, transcript_summary):
-        token = self.get_access_token()
+    def log_call(self, phone, direction, duration, status, transcript_summary, user_id=None):
+        token = self.get_access_token(user_id)
         if not token:
             return False
 
