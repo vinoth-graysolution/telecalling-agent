@@ -21,7 +21,7 @@ const WhatsAppBadge = ({ status }) => {
 }
 
 const Appointments = () => {
-  const [activeTab, setActiveTab] = useState('Today');
+   const [activeTab, setActiveTab] = useState('Today');
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [callingId, setCallingId] = useState(null);
@@ -63,8 +63,10 @@ const Appointments = () => {
   const filteredData = appointments.filter(apt => {
     if (activeTab === 'Today') {
       return apt.appointment_date === today;
-    } else {
+    } else if (activeTab === 'Upcoming') {
       return apt.appointment_date > today;
+    } else {
+      return apt.appointment_date < today;
     }
   });
 
@@ -88,6 +90,12 @@ const Appointments = () => {
              className={`px-4 py-3.5 text-sm font-semibold border-b-2 transition-colors ${activeTab === 'Upcoming' ? 'border-gray-900 text-gray-900' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
            >
              Upcoming
+           </button>
+           <button 
+             onClick={() => setActiveTab('History')}
+             className={`px-4 py-3.5 text-sm font-semibold border-b-2 transition-colors ${activeTab === 'History' ? 'border-gray-900 text-gray-900' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+           >
+             History
            </button>
         </div>
         <div className="overflow-x-auto">
