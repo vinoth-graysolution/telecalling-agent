@@ -1,6 +1,14 @@
 # --- Stage 1: Frontend Builder ---
 FROM node:20-slim AS frontend-builder
 
+# Declare build-time args for Vite (must be set with --build-arg or in docker-compose)
+ARG VITE_COGNITO_USER_POOL_ID
+ARG VITE_COGNITO_APP_CLIENT_ID
+
+# Expose them as ENV so Vite picks them up during build
+ENV VITE_COGNITO_USER_POOL_ID=$VITE_COGNITO_USER_POOL_ID
+ENV VITE_COGNITO_APP_CLIENT_ID=$VITE_COGNITO_APP_CLIENT_ID
+
 WORKDIR /app/frontend
 
 COPY frontend/package*.json ./
