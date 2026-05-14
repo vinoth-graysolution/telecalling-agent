@@ -130,7 +130,7 @@ def list_appointments(
                        whatsapp_status, whatsapp_message_sid
                 FROM appointments
                 {where}
-                ORDER BY appointment_date ASC, appointment_time ASC
+                ORDER BY appointment_date DESC, appointment_time DESC
                 LIMIT %s OFFSET %s
                 """,
                 params + [page_size, offset],
