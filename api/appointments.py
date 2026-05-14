@@ -17,8 +17,13 @@ from pydantic import BaseModel, Field
 from loguru import logger
 
 from database.db import get_connection
+from api.auth import get_current_user
 
-router = APIRouter(prefix="/api/appointments", tags=["Appointments"])
+router = APIRouter(
+    prefix="/api/appointments", 
+    tags=["Appointments"],
+    dependencies=[Depends(get_current_user)]
+)
 
 
 # ---------------------------------------------------------------------------
@@ -119,16 +124,10 @@ def list_appointments(
             # Paginated rows
             cur.execute(
                 f"""
-<<<<<<< HEAD
-                SELECT id, name, phone, treatment_type,
-                       appointment_date, appointment_time,
-                       call_status, calendar_event_id,
-                       whatsapp_status, whatsapp_message_sid
-=======
                 SELECT id, name, phone, doctor, reason, patient_type,
                        treatment_type, appointment_date, appointment_time,
-                       call_status, calendar_event_id
->>>>>>> main
+                       call_status, calendar_event_id,
+                       whatsapp_status, whatsapp_message_sid
                 FROM appointments
                 {where}
                 ORDER BY appointment_date ASC, appointment_time ASC
@@ -171,16 +170,10 @@ def get_appointment(appointment_id: int):
         with conn.cursor() as cur:
             cur.execute(
                 """
-<<<<<<< HEAD
-                SELECT id, name, phone, treatment_type,
-                       appointment_date, appointment_time,
-                       call_status, calendar_event_id,
-                       whatsapp_status, whatsapp_message_sid
-=======
                 SELECT id, name, phone, doctor, reason, patient_type,
                        treatment_type, appointment_date, appointment_time,
-                       call_status, calendar_event_id
->>>>>>> main
+                       call_status, calendar_event_id,
+                       whatsapp_status, whatsapp_message_sid
                 FROM appointments
                 WHERE id = %s
                 """,

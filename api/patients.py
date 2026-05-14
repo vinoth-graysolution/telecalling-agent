@@ -5,8 +5,15 @@ from loguru import logger
 from database.db import get_connection
 from api.auth import require_roles
 
-router = APIRouter(prefix="/api/patients", tags=["Patients"])
 _AUTHORIZED = Depends(require_roles(["vendor", "admin"]))
+
+router = APIRouter(
+    prefix="/api/patients", 
+    tags=["Patients"],
+    dependencies=[_AUTHORIZED]
+)
+
+
 
 @router.get("", summary="List patients")
 def list_patients(

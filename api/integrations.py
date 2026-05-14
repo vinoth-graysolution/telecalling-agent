@@ -8,11 +8,16 @@ from api.auth import require_roles
 from integrations.zoho import zoho_service
 from loguru import logger
 
-router = APIRouter(prefix="/api/integrations", tags=["Integrations"])
 _AUTHORIZED = Depends(require_roles(["admin", "vendor"]))
 
-@router.get("/zoho/authorize")
+router = APIRouter(
+    prefix="/api/integrations", 
+    tags=["Integrations"]
+)
+
+@router.get("/zoho/authorize", dependencies=[_AUTHORIZED])
 def authorize_zoho(auth=_AUTHORIZED):
+
     """Redirect to Zoho OAuth consent screen"""
     logger.info(f"Initiating Zoho authorization for user: {auth.get('sub')}")
     client_id = os.getenv("ZOHO_CLIENT_ID")
@@ -74,7 +79,7 @@ def zoho_callback(code: str, state: str = None):
         
     return RedirectResponse(url="/settings?zoho=success")
 
-@router.get("/zoho/status")
+@router.get("/zoho/status", dependencies=[_AUTHORIZED])
 def get_zoho_status(auth=_AUTHORIZED):
     """Check if Zoho is connected for the current user"""
     user_id = auth.get("sub")
@@ -93,7 +98,7 @@ def get_zoho_status(auth=_AUTHORIZED):
     finally:
         conn.close()
 
-@router.post("/zoho/sync")
+@router.post("/zoho/sync", dependencies=[_AUTHORIZED])
 def sync_zoho_leads(auth=_AUTHORIZED):
     """Manually trigger lead sync from Zoho for the current user"""
     user_id = auth.get("sub")

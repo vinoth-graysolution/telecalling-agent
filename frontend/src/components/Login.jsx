@@ -104,6 +104,8 @@ const Login = ({ onLogin, type = "Vendor" }) => {
           </div>
         </form>
 
+{/* Social logins disabled temporarily as providers are not configured in Cognito */}
+        {/* 
         <div className="mt-8">
           <div className="relative mb-8">
             <div className="absolute inset-0 flex items-center">
@@ -140,7 +142,9 @@ const Login = ({ onLogin, type = "Vendor" }) => {
               Microsoft
             </button>
           </div>
-        </div>
+        </div> 
+        */}
+
 
         <div className="mt-10 pt-8 border-t border-gray-100">
           <p className="text-center text-[11px] text-gray-400 font-medium tracking-wide flex items-center justify-center gap-2 uppercase">

@@ -8,8 +8,14 @@ import csv
 import io
 import asyncio
 
-router = APIRouter(prefix="/api/campaigns", tags=["Campaigns"])
 _AUTHORIZED = Depends(require_roles(["vendor", "admin"]))
+
+router = APIRouter(
+    prefix="/api/campaigns", 
+    tags=["Campaigns"],
+    dependencies=[_AUTHORIZED]
+)
+
 
 class CampaignTrigger(BaseModel):
     name: str
@@ -60,7 +66,7 @@ async def process_campaign(campaign_id: int, phone_numbers: list[str]):
         conn.close()
 
 @router.post("/trigger", summary="Start a new campaign")
-def trigger_campaign(data: CampaignTrigger, background_tasks: BackgroundTasks, auth=_AUTHORIZED):
+def trigger_campaign(data: CampaignTrigger, background_tasks: BackgroundTasks):
     conn = get_connection()
     try:
         with conn.cursor() as cur:
@@ -81,7 +87,7 @@ def trigger_campaign(data: CampaignTrigger, background_tasks: BackgroundTasks, a
         conn.close()
 
 @router.get("", summary="List all campaigns")
-def list_campaigns(auth=_AUTHORIZED):
+def list_campaigns():
     conn = get_connection()
     try:
         with conn.cursor() as cur:

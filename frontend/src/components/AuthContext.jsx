@@ -1,6 +1,21 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { 
+  CognitoUserPool, 
+  CognitoUser, 
+  AuthenticationDetails,
+  CognitoUserAttribute
+} from 'amazon-cognito-identity-js';
 
 const AuthContext = createContext();
+
+// ---------------------------------------------------------------------------
+// Cognito Configuration
+// ---------------------------------------------------------------------------
+const poolData = {
+  UserPoolId: import.meta.env.VITE_COGNITO_USER_POOL_ID,
+  ClientId: import.meta.env.VITE_COGNITO_APP_CLIENT_ID,
+};
+const userPool = new CognitoUserPool(poolData);
 
 // ---------------------------------------------------------------------------
 // Tiny helper: decode a JWT payload (no signature verification – server does that)
@@ -15,11 +30,16 @@ function parseJwt(token) {
 
 function buildUserFromPayload(payload) {
   if (!payload) return null;
+  
+  // Cognito groups are usually in 'cognito:groups'
+  const groups = payload['cognito:groups'] || [];
+  const role = groups.includes('Admins') ? 'admin' : 'vendor';
+  
   return {
-    email: payload.sub,
-    name: payload.name || payload.sub,
-    type: payload.role === 'admin' ? 'Admin' : 'Vendor',
-    role: payload.role,
+    email: payload.email || payload.sub,
+    name: payload.name || payload.email || 'User',
+    type: role === 'admin' ? 'Admin' : 'Vendor',
+    role: role,
   };
 }
 
@@ -31,73 +51,134 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [isInitializing, setIsInitializing] = useState(true);
 
-  // On mount – restore session from localStorage OR URL (for social login)
-  useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const tokenFromUrl = urlParams.get('access_token');
-    
-    if (tokenFromUrl) {
-      localStorage.setItem('medvoice_access_token', tokenFromUrl);
-      // Clean up URL
-      window.history.replaceState({}, document.title, window.location.pathname);
+  // Helper to sync session to state
+  const syncSession = useCallback((session) => {
+    if (session && session.isValid()) {
+      const idToken = session.getIdToken().getJwtToken();
+      localStorage.setItem('medvoice_access_token', idToken);
+      const payload = session.getIdToken().payload;
+      setUser(buildUserFromPayload(payload));
+      setIsAuthenticated(true);
+    } else {
+      localStorage.removeItem('medvoice_access_token');
+      setUser(null);
+      setIsAuthenticated(false);
     }
-
-    const token = localStorage.getItem('medvoice_access_token');
-    if (token) {
-      const payload = parseJwt(token);
-      // Check token is not expired
-      if (payload && payload.exp > Date.now() / 1000) {
-        setUser(buildUserFromPayload(payload));
-        setIsAuthenticated(true);
-      } else {
-        // Expired – clear it
-        localStorage.removeItem('medvoice_access_token');
-      }
-    }
-    setIsInitializing(false);
   }, []);
 
-  // ---------------------------------------------------------------------------
-  // login: call our own FastAPI endpoint
-  // ---------------------------------------------------------------------------
-  const login = async (email, password) => {
-    try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Invalid credentials');
+  // On mount – restore session from Cognito OR URL (for social login)
+  useEffect(() => {
+    const checkSession = async () => {
+      // 1. Check for social login redirect (token in URL)
+      const urlParams = new URLSearchParams(window.location.search);
+      const tokenFromUrl = urlParams.get('access_token');
+      
+      if (tokenFromUrl) {
+        localStorage.setItem('medvoice_access_token', tokenFromUrl);
+        const payload = parseJwt(tokenFromUrl);
+        if (payload && payload.exp > Date.now() / 1000) {
+          setUser(buildUserFromPayload(payload));
+          setIsAuthenticated(true);
+        }
+        // Clean up URL
+        window.history.replaceState({}, document.title, window.location.pathname);
+      } else {
+        // 2. Check for existing Cognito session
+        const cognitoUser = userPool.getCurrentUser();
+        if (cognitoUser) {
+          cognitoUser.getSession((err, session) => {
+            if (!err) {
+              syncSession(session);
+            }
+            setIsInitializing(false);
+          });
+          return;
+        }
       }
+      setIsInitializing(false);
+    };
 
-      const data = await response.json();
-      localStorage.setItem('medvoice_access_token', data.access_token);
+    checkSession();
+  }, [syncSession]);
 
-      const payload = parseJwt(data.access_token);
-      const userObj = buildUserFromPayload(payload);
-      setUser(userObj);
-      setIsAuthenticated(true);
-      return userObj;
-    } catch (error) {
-      console.error('Login error:', error);
-      throw error;
-    }
+  // ---------------------------------------------------------------------------
+  // login: use Cognito SDK
+  // ---------------------------------------------------------------------------
+  const login = (email, password) => {
+    return new Promise((resolve, reject) => {
+      const authenticationData = {
+        Username: email,
+        Password: password,
+      };
+      const authenticationDetails = new AuthenticationDetails(authenticationData);
+      const userData = {
+        Username: email,
+        Pool: userPool,
+      };
+      const cognitoUser = new CognitoUser(userData);
+
+      cognitoUser.authenticateUser(authenticationDetails, {
+        onSuccess: (result) => {
+          syncSession(result);
+          resolve(buildUserFromPayload(result.getIdToken().payload));
+        },
+        onFailure: (err) => {
+          console.error('Login error:', err);
+          reject(new Error(err.message || 'Invalid credentials'));
+        },
+        newPasswordRequired: (userAttributes, requiredAttributes) => {
+          // Handle new password required if necessary
+          reject(new Error('New password required'));
+        }
+      });
+    });
   };
-
 
   // ---------------------------------------------------------------------------
   // logout
   // ---------------------------------------------------------------------------
   const logout = () => {
+    const cognitoUser = userPool.getCurrentUser();
+    if (cognitoUser) {
+      cognitoUser.signOut();
+    }
     localStorage.removeItem('medvoice_access_token');
     setIsAuthenticated(false);
     setUser(null);
   };
 
+  const forgotPassword = (email) => {
+    return new Promise((resolve, reject) => {
+      const userData = {
+        Username: email,
+        Pool: userPool,
+      };
+      const cognitoUser = new CognitoUser(userData);
+
+      cognitoUser.forgotPassword({
+        onSuccess: (data) => resolve(data),
+        onFailure: (err) => reject(new Error(err.message)),
+      });
+    });
+  };
+
+  const resetPassword = (email, code, newPassword) => {
+    return new Promise((resolve, reject) => {
+      const userData = {
+        Username: email,
+        Pool: userPool,
+      };
+      const cognitoUser = new CognitoUser(userData);
+
+      cognitoUser.confirmPassword(code, newPassword, {
+        onSuccess: () => resolve(),
+        onFailure: (err) => reject(new Error(err.message)),
+      });
+    });
+  };
+
   // ---------------------------------------------------------------------------
-  // Loading screen while we check localStorage
+  // Loading screen while we check session
   // ---------------------------------------------------------------------------
   if (isInitializing) {
     return (
@@ -110,30 +191,6 @@ export const AuthProvider = ({ children }) => {
     );
   }
 
-  const forgotPassword = async (email) => {
-    const response = await fetch('/api/auth/forgot-password', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email }),
-    });
-    if (!response.ok) {
-      const data = await response.json();
-      throw new Error(data.detail || 'Failed to initiate password reset');
-    }
-  };
-
-  const resetPassword = async (email, code, newPassword) => {
-    const response = await fetch('/api/auth/reset-password', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, code, new_password: newPassword }),
-    });
-    if (!response.ok) {
-      const data = await response.json();
-      throw new Error(data.detail || 'Failed to reset password');
-    }
-  };
-
   return (
     <AuthContext.Provider value={{ isAuthenticated, user, login, logout, forgotPassword, resetPassword }}>
       {children}
@@ -142,3 +199,4 @@ export const AuthProvider = ({ children }) => {
 };
 
 export const useAuth = () => useContext(AuthContext);
+
