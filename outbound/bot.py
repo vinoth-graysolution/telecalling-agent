@@ -67,10 +67,18 @@ async def run_bot(transport: BaseTransport, handle_sigint: bool, phone: str = "u
     )
 
     time_context = get_current_context()
+
+    # Use safe substitution: the prompt may contain literal JSON braces like
+    # {"date": ...} which would crash Python's str.format().  We only replace
+    # the known placeholder keys: {date}, {day}, {time}, {time_12h}.
+    raw_prompt = get_system_config("outbound_prompt")
+    for key, value in time_context.items():
+        raw_prompt = raw_prompt.replace("{" + key + "}", value)
+
     messages = [
         {
             "role": "system",
-            "content": get_system_config("outbound_prompt").format(**time_context),
+            "content": raw_prompt,
         }
     ]
 
