@@ -9,6 +9,7 @@ from botocore.exceptions import ClientError
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 from dotenv import load_dotenv
+import botocore
 
 load_dotenv()
 
@@ -34,7 +35,8 @@ def login(body: LoginRequest):
     """
     Authenticates a user with AWS Cognito and returns tokens.
     """
-    client = boto3.client("cognito-idp", region_name=AWS_REGION)
+    config = botocore.config.Config(signature_version=botocore.UNSIGNED)
+    client = boto3.client("cognito-idp", region_name=AWS_REGION, config=config)
 
     try:
         # 1. Authenticate user
@@ -115,7 +117,8 @@ class ResetPasswordRequest(BaseModel):
 
 @router.post("/forgot-password", summary="Initiate password reset")
 def forgot_password(body: ForgotPasswordRequest):
-    client = boto3.client("cognito-idp", region_name=AWS_REGION)
+    config = botocore.config.Config(signature_version=botocore.UNSIGNED)
+    client = boto3.client("cognito-idp", region_name=AWS_REGION, config=config)
     try:
         client.forgot_password(
             ClientId=APP_CLIENT_ID,
@@ -127,7 +130,8 @@ def forgot_password(body: ForgotPasswordRequest):
 
 @router.post("/reset-password", summary="Confirm password reset")
 def reset_password(body: ResetPasswordRequest):
-    client = boto3.client("cognito-idp", region_name=AWS_REGION)
+    config = botocore.config.Config(signature_version=botocore.UNSIGNED)
+    client = boto3.client("cognito-idp", region_name=AWS_REGION, config=config)
     try:
         client.confirm_forgot_password(
             ClientId=APP_CLIENT_ID,

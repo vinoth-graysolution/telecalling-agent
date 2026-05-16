@@ -13,3 +13,10 @@ sqlalchemy
 pydantic
 firebase-admin
 python-jose[cryptography]
+boto3
+requests
+open-intent-classifier
+google-api-python-client
+google-auth
+python-multipart
+loguru
