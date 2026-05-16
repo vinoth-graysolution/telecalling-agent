@@ -98,4 +98,19 @@ export const getLiveCalls = async () => {
   return data;
 };
 
+// Admin User Management
+export const getAdminUsers = () => api.get('/admin/users');
+
+export const createAdminUser = (email, name, role) =>
+  api.post('/admin/users', { email, name, role });
+
+export const disableAdminUser = async (username) => {
+  const response = await fetch(`/api/admin/users/${encodeURIComponent(username)}`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  });
+  if (!response.ok) throw new Error(`API Error: ${response.statusText}`);
+  return response.json();
+};
+
 export default api;

@@ -17,6 +17,7 @@ from api.appointments import router as appointments_router
 from api.logs import router as logs_router
 from api.login import router as login_router
 from api.admin_config import router as admin_config_router
+from api.admin_users import router as admin_users_router
 from api.campaigns import router as campaigns_router
 from api.patients import router as patients_router
 from api.integrations import router as integrations_router
@@ -46,6 +47,7 @@ app.include_router(dashboard_router)
 app.include_router(appointments_router)
 app.include_router(logs_router)
 app.include_router(admin_config_router)
+app.include_router(admin_users_router)
 app.include_router(campaigns_router)
 app.include_router(patients_router)
 app.include_router(integrations_router)
