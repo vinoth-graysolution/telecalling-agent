@@ -83,12 +83,27 @@ export const AuthProvider = ({ children }) => {
         // Clean up URL
         window.history.replaceState({}, document.title, window.location.pathname);
       } else {
-        // 2. Check for existing Cognito session
+        // 2. Check local storage first for a valid, non-expired token (fast-path seamless login)
+        const localToken = localStorage.getItem('medvoice_access_token');
+        if (localToken) {
+          const payload = parseJwt(localToken);
+          // If token is valid and has at least 60 seconds before expiration
+          if (payload && payload.exp > (Date.now() / 1000) + 60) {
+            setUser(buildUserFromPayload(payload));
+            setIsAuthenticated(true);
+            setIsInitializing(false);
+            return;
+          }
+        }
+
+        // 3. Fallback: Check for existing Cognito session (handles token refresh automatically)
         const cognitoUser = userPool.getCurrentUser();
         if (cognitoUser) {
           cognitoUser.getSession((err, session) => {
             if (!err) {
               syncSession(session);
+            } else {
+              localStorage.removeItem('medvoice_access_token');
             }
             setIsInitializing(false);
           });
